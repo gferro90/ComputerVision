@@ -26,14 +26,16 @@ include $(MAKEDEFAULTDIR)/MakeStdLibDefs.$(TARGET)
 #CFLAGS +=
 
 #add other includes if needed 
-#INCLUDES += 
+INCLUDES = -I/home/pc/OpenCV/opencv-3.0.0/include/opencv2
+INCLUDES += -I/home/pc/OpenCV/opencv-3.0.0/include/opencv 
+INCLUDES += -I/home/pc/Kinect/kinect/OpenNI-OpenNI-e263e59/Include
 
 # Static project libraries
 LIBRARIES_STATIC = 
 
 #targets
 all: $(SUBPROJ) $(OBJS) \
-	$(BUILD_DIR)/output$(EXEEXT)
+	$(BUILD_DIR)/KinectScorbot$(EXEEXT)
 
 #include rules
 include $(MAKEDEFAULTDIR)/MakeStdLibRules.$(TARGET)
