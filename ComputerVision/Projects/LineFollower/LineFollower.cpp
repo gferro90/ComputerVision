@@ -29,6 +29,9 @@
 /*                         Project header includes                           */
 /*---------------------------------------------------------------------------*/
 
+#include "LineFollower.h"
+#include "Utils.h"
+
 /*---------------------------------------------------------------------------*/
 /*                           Static definitions                              */
 /*---------------------------------------------------------------------------*/
@@ -36,35 +39,22 @@
 /*---------------------------------------------------------------------------*/
 /*                           Method definitions                              */
 /*---------------------------------------------------------------------------*/
-#include <cv.h>
-#include <highgui.h>
-#include <cxcore.h>
-#include <opencv2/core/core.hpp>
-#include <opencv2/imgcodecs.hpp>
-#include <opencv2/highgui/highgui.hpp>
-#include "opencv2/imgproc/imgproc.hpp"
-#include <stdio.h>
-#include <stdlib.h>
-#include <iostream>
+
 using namespace cv;
 using namespace std;
 
 
-#define CAMERA 0
+static stati status=FOLLOW_RIGHT;
+static const char* signalAction[] = { "TurnLeft", "TurnRight", 0 };
 
-
-//callback for trackbar. nothing to be done here
-void on_trackbar(int,
-                 void*) {
-}
 
 int main(int argc,
          char* argv[]) {
     //parameters of the image we are working on
-    int height=0;
-    int width=0;
+    int height = 0;
+    int width = 0;
     int step;
-    int channels=0;
+    int channels = 0;
     // ranges of HSV boundaries
     int t1min = 0, t1max = 0, t2min = 0, t2max = 0, t3min = 0, t3max = 0;
 
@@ -83,7 +73,7 @@ int main(int argc,
         t3max =(int) CV_MAT_ELEM(*threshold_matrix,float,1,2);
     }
 
-    // Open capture device. 0 is /dev/video0, 1 is /dev/video1, etc.
+// Open capture device. 0 is /dev/video0, 1 is /dev/video1, etc.
     CvCapture* capture = cvCaptureFromCAM(CAMERA);
 
     if (!capture) {
@@ -92,10 +82,10 @@ int main(int argc,
         return -1;
     }
 
-    // grab an image from the capture
+// grab an image from the capture
     IplImage* frame = cvQueryFrame(capture);
 
-    // Create a window in which the captured images will be presented
+// Create a window in which the captured images will be presented
     cvNamedWindow("Camera", CV_WINDOW_AUTOSIZE);
     cvNamedWindow("HSV", CV_WINDOW_AUTOSIZE);
     cvNamedWindow("F1", CV_WINDOW_AUTOSIZE);
@@ -106,7 +96,7 @@ int main(int argc,
     namedWindow("lineBandGreyThres", 1);
     int threshold_value = 0;
 
-    /// Create Trackbars to filter HSV image to get signals colours
+/// Create Trackbars to filter HSV image to get signals colours
     char TrackbarName1[50] = "t1min";
     char TrackbarName2[50] = "t1max";
     char TrackbarName3[50] = "t2min";
@@ -123,7 +113,7 @@ int main(int argc,
     cvCreateTrackbar(TrackbarName5, "F3", &t3min, 260, NULL);
     cvCreateTrackbar(TrackbarName6, "F3", &t3max, 260, NULL);
 
-    // Create trackbars to threshold the line for the line follower
+// Create trackbars to threshold the line for the line follower
     char* trackbar_type = "Type: \n 0: Binary \n 1: Binary Inverted \n 2: Truncate \n 3: To Zero \n 4: To Zero Inverted";
     char* trackbar_value = "Value";
     int const max_value = 255;
@@ -133,19 +123,19 @@ int main(int argc,
 
     createTrackbar(trackbar_value, "lineBandGrey", &threshold_value, max_value, NULL);
 
-    // Load threshold from the slider bars in these 2 parameters
+// Load threshold from the slider bars in these 2 parameters
     CvScalar hsv_min = cvScalar(t1min, t2min, t3min, 0);
     CvScalar hsv_max = cvScalar(t1max, t2max, t3max, 0);
 
-    // get the image data
+// get the image data
     height = frame->height;
     width = frame->width;
     step = frame->widthStep;
 
-    // capture size -
+// capture size -
     CvSize size = cvSize(width, height);
 
-    // Initialize different images that are going to be used in the program
+// Initialize different images that are going to be used in the program
     IplImage* hsv_frame = cvCreateImage(size, IPL_DEPTH_8U, 3); // image converted to HSV plane
     IplImage* thresholded = cvCreateImage(size, IPL_DEPTH_8U, 1); // final thresholded image
     IplImage* thresholded1 = cvCreateImage(size, IPL_DEPTH_8U, 1); // Component image threshold
@@ -153,11 +143,69 @@ int main(int argc,
     IplImage* thresholded3 = cvCreateImage(size, IPL_DEPTH_8U, 1);
     IplImage* filtered = cvCreateImage(size, IPL_DEPTH_8U, 1);  //smoothed image
 
-    //program loop
+//program loop
     while (1) {
-        // Load threshold from the slider bars in these 2 parameters
-        hsv_min = cvScalar(t1min, t2min, t3min, 0);
-        hsv_max = cvScalar(t1max, t2max, t3max, 0);
+#if 0
+
+        //WIP
+
+        // Get one frame
+        frame = cvQueryFrame(capture);
+
+        if (!frame) {
+            fprintf(stderr, "ERROR: frame is null...\n");
+            getchar();
+            break;
+        }
+
+        int i = 0;
+        int speedControl=0;
+        int dirControl=0;
+        while (signalAction[i] != NULL) {
+            // query the color range
+            ColorRange *signal=GetStreetSignalRanges(signalAction[i],signalColorRange, status);
+            if(signal!=NULL){
+                // filter the hsv image
+                // detect the circle
+                // depending on the signal detected do something
+                speedControl=DetectSignal(frame, thresholded, *signal, status);
+                //assume one signal per time
+                break;
+            }
+            i++;
+        }
+
+
+
+        //cvCanny(thresholded, thresholded, 0,255);
+        cv::Mat frameMat = cv::cvarrToMat(frame);
+
+        //create the image band
+        Rect rect(LINE_BAND_X(frameMat), LINE_BAND_Y(frameMat), LINE_BAND_WIDTH(frameMat), LINE_BAND_HEIGHT(frameMat));
+        cv::Mat lineBand(frameMat, rect);
+
+        //create images for gryscale and thresholded grayscale
+        Mat lineBandGrey;
+        Mat lineBandGreyThres;
+
+        //convert RGB to grayscale
+        cvtColor(lineBand, lineBandGrey, CV_BGR2GRAY);
+
+        //threshold the grayscale to detect the line
+        threshold(lineBandGrey, lineBandGreyThres, threshold_value, 255, threshold_type);
+
+
+        dirControl=FollowLine(lineBandGreyThres, frame->width + 1, 0);
+
+        short int controls=(speedControl<<8);
+        controls|=dirControl;
+
+        if(write(usbFD, &controls, sizeof(controls))<0){
+            printf("\nUSB write ERROR!\n");
+        }
+
+#endif
+
 
         // Get one frame
         frame = cvQueryFrame(capture);
@@ -172,7 +220,7 @@ int main(int argc,
         cv::Mat frameMat = cv::cvarrToMat(frame);
 
         //create the image band
-        Rect rect(10, 2 * frameMat.rows / 3, frameMat.cols - 20, frameMat.rows / 12);
+        Rect rect(LINE_BAND_X(frameMat.rows,frameMat.cols), LINE_BAND_Y(frameMat.rows,frameMat.cols), LINE_BAND_WIDTH(frameMat.rows, frameMat.cols), LINE_BAND_HEIGHT(frameMat.rows,frameMat.cols));
         cv::Mat lineBand(frameMat, rect);
 
         //create images for gryscale and thresholded grayscale
@@ -212,7 +260,7 @@ int main(int argc,
         //draw contours on the band
         for (int i = 0; i < contours.size(); i++) {
             Scalar color = Scalar(rng.uniform(0, 255), rng.uniform(0, 255), rng.uniform(0, 255));
-            drawContours(frameMat, contours, i, color, 2, 8, hierarchy, 0, Point());
+            drawContours(lineBand, contours, i, color, 2, 8, hierarchy, 0, Point());
         }
         imshow("lineBand", lineBand);
         imshow("lineBandGrey", lineBandGrey);
@@ -232,6 +280,12 @@ int main(int argc,
 
 
 
+        //TODO USB Communication with the car
+
+        // Load threshold from the slider bars in these 2 parameters
+        hsv_min = cvScalar(t1min, t2min, t3min, 0);
+        hsv_max = cvScalar(t1max, t2max, t3max, 0);
+
         // Covert color space to HSV as it is much easier to filter colors in the HSV color-space.
         cvCvtColor(frame, hsv_frame, CV_BGR2HSV);
 
@@ -241,52 +295,52 @@ int main(int argc,
         // the below lines of code is for visual purpose only remove after calibration
         //--------------FROM HERE-----------------------------------
         //Split image into its 3 one dimensional images
-        cvSplit(hsv_frame, thresholded1, thresholded2, thresholded3, NULL);
+        /*   cvSplit(hsv_frame, thresholded1, thresholded2, thresholded3, NULL);
 
-        // Filter out colors which are out of range.
-        cvInRangeS(thresholded1, cvScalar(t1min, 0, 0, 0), cvScalar(t1max, 0, 0, 0), thresholded1);
-        cvInRangeS(thresholded2, cvScalar(t2min, 0, 0, 0), cvScalar(t2max, 0, 0, 0), thresholded2);
-        cvInRangeS(thresholded3, cvScalar(t3min, 0, 0, 0), cvScalar(t3max, 0, 0, 0), thresholded3);
-
+         // Filter out colors which are out of range.
+         cvInRangeS(thresholded1, cvScalar(t1min, 0, 0, 0), cvScalar(t1max, 0, 0, 0), thresholded1);
+         cvInRangeS(thresholded2, cvScalar(t2min, 0, 0, 0), cvScalar(t2max, 0, 0, 0), thresholded2);
+         cvInRangeS(thresholded3, cvScalar(t3min, 0, 0, 0), cvScalar(t3max, 0, 0, 0), thresholded3);
+         */
         //-------------REMOVE OR COMMENT AFTER CALIBRATION TILL HERE ------------------
-
         // hough detector works better with some smoothing of the image
-        cvSmooth( thresholded, thresholded, CV_GAUSSIAN, 9, 9 );
+        cvSmooth(thresholded, thresholded, CV_GAUSSIAN, 9, 9);
 
         // circle detection
         // Memory for circles
         CvMemStorage* storage = cvCreateMemStorage(0);
 
         //hough transform to detect circle
-        CvSeq* circles = cvHoughCircles(thresholded, storage, CV_HOUGH_GRADIENT, 2,
-                                        thresholded->height/4, 100, 50, 10, 400);
+        CvSeq* circles = cvHoughCircles(thresholded, storage, CV_HOUGH_GRADIENT, 2, thresholded->height / 4, 100, 50, 10, 400);
 
-        for (int i = 0; i < circles->total; i++)
-        {   //get the parameters of circles detected
-            float* p = (float*)cvGetSeqElem( circles, i );
+        for (int i = 0; i < circles->total; i++) {   //get the parameters of circles detected
+            float* p = (float*) cvGetSeqElem(circles, i);
             //printf("Ball! x=%f y=%f r=%f\n\r",p[0],p[1],p[2] );
 
-            // draw a circle with the centre and the radius obtained from the hough transform
-            cvCircle( frame, cvPoint(cvRound(p[0]),cvRound(p[1])),  //plot centre
-                                    2, CV_RGB(255,255,255),-1, 8, 0 );
-            cvCircle( frame, cvPoint(cvRound(p[0]),cvRound(p[1])),  //plot circle
-                                    cvRound(p[2]), CV_RGB(0,255,0), 2, 8, 0 );
+            //radius condition on the ball
+            if (p[2] <= SIGNAL_MAX_RADIUS && p[2] >= SIGNAL_MIN_RADIUS) {
+
+                // draw a circle with the centre and the radius obtained from the hough transform
+                cvCircle(frame, cvPoint(cvRound(p[0]), cvRound(p[1])),  //plot centre
+                         2, CV_RGB(255, 255, 255), -1, 8, 0);
+                cvCircle(frame, cvPoint(cvRound(p[0]), cvRound(p[1])),  //plot circle
+                         cvRound(p[2]), CV_RGB(0, 255, 0), 2, 8, 0);
+                break;
+            }
         }
 
-         /* for testing purpose you can show all the images but when done with calibration
+        /* for testing purpose you can show all the images but when done with calibration
          only show frame to keep the screen clean  */
 
-         cvShowImage( "Camera", frame ); // Original stream with detected ball overlay
-         cvShowImage( "HSV", hsv_frame); // Original stream in the HSV color space
-         cvShowImage( "After Color Filtering", thresholded ); // The stream after color filtering
-         cvShowImage( "F1", thresholded1 ); // individual filters
+        cvShowImage("Camera", frame); // Original stream with detected ball overlay
+        cvShowImage("HSV", hsv_frame); // Original stream in the HSV color space
+        cvShowImage("After Color Filtering", thresholded); // The stream after color filtering
+        /* cvShowImage( "F1", thresholded1 ); // individual filters
          cvShowImage( "F2", thresholded2 );
          cvShowImage( "F3", thresholded3 );
-
+         */
         //cvShowImage( "filtered", thresholded );
         cvReleaseMemStorage(&storage);
-
-
 
         //If ESC key pressed, Key=0x10001B under OpenCV 0.9.7(linux version),
         //remove higher bits using AND operator

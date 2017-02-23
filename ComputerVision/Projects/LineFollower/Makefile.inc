@@ -1,6 +1,6 @@
 
 #source code to be compiled here
-OBJSX= LineFollower.x	
+OBJSX= LineFollower.x PIDController.x Utils.x SignalActions.x
 
 #paths of other projects makefiles
 SPB = 
