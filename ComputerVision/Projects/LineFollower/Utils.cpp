@@ -35,6 +35,12 @@
 #include "Utils.h"
 #include "PIDController.h"
 
+static bool InRange(float input,
+                    float min,
+                    float max) {
+    return (input >= min) && (input <= max);
+}
+
 /*---------------------------------------------------------------------------*/
 /*                           Method definitions                              */
 /*---------------------------------------------------------------------------*/
@@ -54,8 +60,14 @@ ColorRange *GetStreetSignalRanges(const char* input,
 
 int USBConfig() {
     int usbFD = -1;
+    int k = 0;
     while (usbFD < 0) {
         usbFD = open(USB_PORT, O_RDWR | O_NOCTTY | O_SYNC);
+        if ((k++) > 100) {
+            printf("USB:: Failed open %s\n", USB_PORT);
+            return -1;
+        }
+        usleep(100000);
     }
 
     int speed = USB_BAUDRATE;
@@ -106,18 +118,20 @@ int PwmRemapping(float control,
                  int maxOut) {
     float rangeIn = maxIn - minIn;
     int rangeOut = maxOut - minOut;
-    return (control - minIn) * rangeOut / rangeIn + minOut;
+    return (int) (((control - minIn) * rangeOut) / rangeIn) + minOut;
 }
 
-int DetectSignal(IplImage *frame,
+int DetectSignal(IplImage *hsv_frame,
                  IplImage *thresholded,
                  ColorRange &colorRange,
-                 int& status) {
-    int speedControl = 0;
+                 stati& status) {
 
 // Load threshold from the slider bars in these 2 parameters
     CvScalar hsv_min = colorRange.range1;
     CvScalar hsv_max = colorRange.range2;
+
+    // Filter out colors which are out of range.
+    cvInRangeS(hsv_frame, hsv_min, hsv_max, thresholded);
 
 // the below lines of code is for visual purpose only remove after calibration
 //--------------FROM HERE-----------------------------------
@@ -140,6 +154,7 @@ int DetectSignal(IplImage *frame,
 //hough transform to detect circle
     CvSeq* circles = cvHoughCircles(thresholded, storage, CV_HOUGH_GRADIENT, 2, thresholded->height / 4, 100, 50, 10, 400);
 
+    float speedControl = 0.;
     for (int i = 0; i < circles->total; i++) {   //get the parameters of circles detected
         float* p = (float*) cvGetSeqElem(circles, i);
         //printf("Ball! x=%f y=%f r=%f\n\r",p[0],p[1],p[2] );
@@ -148,14 +163,14 @@ int DetectSignal(IplImage *frame,
         if (p[2] <= SIGNAL_MAX_RADIUS && p[2] >= SIGNAL_MIN_RADIUS) {
 
             // draw a circle with the centre and the radius obtained from the hough transform
-            cvCircle(frame, cvPoint(cvRound(p[0]), cvRound(p[1])),  //plot centre
+            cvCircle(hsv_frame, cvPoint(cvRound(p[0]), cvRound(p[1])),  //plot centre
                      2, CV_RGB(255, 255, 255), -1, 8, 0);
-            cvCircle(frame, cvPoint(cvRound(p[0]), cvRound(p[1])),  //plot circle
+            cvCircle(hsv_frame, cvPoint(cvRound(p[0]), cvRound(p[1])),  //plot circle
                      cvRound(p[2]), CV_RGB(0, 255, 0), 2, 8, 0);
 
-            ControlOutput controlPWMs;
             // execute the signal action changing the status
-            speedControl = colorRange.SignalAction(status);
+            speedControl = colorRange.SignalAction((int&) status);
+            printf("\ndetected signal for %s\n", colorRange.signalName);
             break;
         }
     }
@@ -164,13 +179,15 @@ int DetectSignal(IplImage *frame,
      only show frame to keep the screen clean  */
 
     cvReleaseMemStorage(&storage);
-    return speedControl;
+    return PwmRemapping(speedControl, SPEED_CONTROL_MIN, SPEED_CONTROL_MAX, SPEED_PWM_MIN, SPEED_PWM_MAX);
 }
 
-int FollowLine(Mat lineBandGreyThres,
-               double initialMin,
-               double initialMax,
-               int status) {
+int FollowLine(Mat &lineBandGreyThres,
+               double initialMinX,
+               double initialMaxX,
+               double initialMinY,
+               double initialMaxY,
+               stati status) {
 //get the contours
     int dirControl = 0;
 
@@ -180,19 +197,53 @@ int FollowLine(Mat lineBandGreyThres,
     Mat temp = lineBandGreyThres.clone();
     findContours(temp, contours, hierarchy, CV_RETR_TREE, CV_CHAIN_APPROX_SIMPLE, Point(0, 0));
 
-    double maxX = initialMax;
-    double minX = initialMin;
+    double maxX = initialMaxX;
+    double minX = initialMinX;
 //search the minimum and maximum x points on all contours
-    for (int i = 0; i < contours.size(); i++) {
-        for (int j = 0; j < contours[i].size(); j++) {
 
-            if ((contours[i])[j].x < minX) {
-                minX = (contours[i])[j].x;
+    for (int i = 0; i < contours.size(); i++) {
+        if (InRange(contours[i].size(), MIN_CONTOURS_SIZE, MAX_CONTOURS_SIZE)) {
+            printf("\nContours size%d\n", contours[i].size());
+            double minX_temp = initialMinX;
+            double maxX_temp = initialMaxX;
+            double minY_temp = initialMinY;
+            double maxY_temp = initialMaxY;
+
+            for (int j = 0; j < contours[i].size(); j++) {
+
+                if ((contours[i])[j].x < minX_temp) {
+                    minX_temp = (contours[i])[j].x;
+                }
+                if ((contours[i])[j].x > maxX_temp) {
+                    maxX_temp = (contours[i])[j].x;
+                }
+                if ((contours[i])[j].y < minY_temp) {
+                    minY_temp = (contours[i])[j].y;
+                }
+                if ((contours[i])[j].y > maxY_temp) {
+                    maxY_temp = (contours[i])[j].y;
+                }
             }
-            if ((contours[i])[j].x > maxX) {
-                maxX = (contours[i])[j].x;
+            //width and height of the contours are compliants with the line
+            if (InRange(maxX_temp - minX_temp, MIN_WIDTH_LINE(lineBandGreyThres.rows, lineBandGreyThres.cols),
+                        MAX_WIDTH_LINE(lineBandGreyThres.rows, lineBandGreyThres.cols))) {
+                if (InRange(maxY_temp - minY_temp, MIN_HEIGHT_LINE(lineBandGreyThres.rows, lineBandGreyThres.cols),
+                            MAX_HEIGHT_LINE(lineBandGreyThres.rows+1, lineBandGreyThres.cols))) {
+                    printf("\nLINE DETECTED w=%f h=%f!!!\n", maxX_temp - minX_temp, maxY_temp - minY_temp);
+                    if (minX_temp < minX) {
+                        minX = minX_temp;
+                    }
+                    if (maxX_temp > maxX) {
+                        maxX = maxX_temp;
+                    }
+                }
             }
         }
+    }
+    //draw contours on the band
+    for (int i = 0; i < contours.size(); i++) {
+        Scalar color = Scalar(rng.uniform(0, 255), rng.uniform(0, 255), rng.uniform(0, 255));
+        drawContours(lineBandGreyThres, contours, i, color, 2, 8, hierarchy, 0, Point());
     }
 
     // something has been detected
@@ -202,34 +253,29 @@ int FollowLine(Mat lineBandGreyThres,
     if (minX <= maxX) {
         switch (status) {
         case (FOLLOW_LEFT): {
+            //assume left line detected
+            //if status is follow left
+            float error = X_REF_LEFT(lineBandGreyThres.rows,lineBandGreyThres.cols) - minX;
 
-            if ((minX <= MIN_X_LINE_LEFT(lineBandGreyThres.rows,lineBandGreyThres.cols)) && (minX <= MAX_X_LINE_LEFT(lineBandGreyThres.rows,lineBandGreyThres.cols))) {
-                //assume left line detected
-                //if status is follow left
-                float error = X_REF_LEFT(lineBandGreyThres.rows,lineBandGreyThres.cols) - minX;
-                //get the drive control on this error
-                control = pid.Execute(error);
-            }
+            //get the drive control on this error
+            control = pid.Execute(error);
         }
             break;
         case (FOLLOW_RIGHT): {
-
-            if ((maxX <= MIN_X_LINE_RIGHT(lineBandGreyThres.rows,lineBandGreyThres.cols)) && (maxX <= MAX_X_LINE_RIGHT(lineBandGreyThres.rows,lineBandGreyThres.cols))) {
-                //assume right line detected
-                //if status is follow right
-                float error = X_REF_RIGHT(lineBandGreyThres.rows,lineBandGreyThres.cols) - maxX;
-                //get the drive control on this error
-                control = pid.Execute(error);
-            }
+            //assume right line detected
+            //if status is follow right
+            float error = X_REF_RIGHT(lineBandGreyThres.rows,lineBandGreyThres.cols) - maxX;
+            printf("\nerror=%f\n", error);
+            //get the drive control on this error
+            control = pid.Execute(error);
         }
             break;
         default: {
             control = 0;                        //??
         }
         }
-
     }
 
     printf("Min=%f Max=%f\n", minX, maxX);
-    return PwmRemapping(control, CONTROL_MIN, CONTROL_MAX, PWM_MIN, PWM_MAX);
+    return PwmRemapping(control, DRIVE_CONTROL_MIN, DRIVE_CONTROL_MAX, DRIVE_PWM_MIN, DRIVE_PWM_MAX);
 }

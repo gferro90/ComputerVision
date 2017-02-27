@@ -40,9 +40,9 @@
 /*                        Inline method definitions                          */
 /*---------------------------------------------------------------------------*/
 
-int TurnLeftAction(int & status);
+float TurnLeftAction(int & status);
 
-int TurnRightAction(int & status);
+float TurnRightAction(int & status);
 
 #endif /* COMPUTERVISION_PROJECTS_LINEFOLLOWER_SIGNALACTIONS_H_ */
 

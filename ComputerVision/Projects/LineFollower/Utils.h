@@ -53,15 +53,17 @@ int PwmRemapping(float control,
                  int minOut,
                  int maxOut);
 
-int DetectSignal(IplImage *frame,
+int DetectSignal(IplImage *hsv_frame,
                  IplImage *thresholded,
                  ColorRange &colorRange,
-                 int& status);
+                 stati& status);
 
-int FollowLine(Mat lineBandGreyThres,
-               double initialMin,
-               double initialMax,
-               int status);
+int FollowLine(Mat &lineBandGreyThres,
+               double initialMinX,
+               double initialMaxX,
+               double initialMinY,
+               double initialMaxY,
+               stati status);
 
 #endif /* COMPUTERVISION_PROJECTS_LINEFOLLOWER_UTILS_H_ */
 

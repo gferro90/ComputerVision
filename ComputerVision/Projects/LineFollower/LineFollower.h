@@ -65,8 +65,9 @@
 #define GREEN1 cvScalar(0, 0, 0, 0) //TODO
 #define GREEN2 cvScalar(0, 0, 0, 0) //TODO
 
-#define RED1 cvScalar(0, 0, 0, 0)//TODO
-#define RED2 cvScalar(0, 0, 0, 0)//TODO
+
+#define ORANGE1 cvScalar(11, 133, 179, 0)//TODO
+#define ORANGE2 cvScalar(128, 190, 235, 0)//TODO
 
 //definition of the line follower band
 #define LINE_BAND_X(rows, cols) 10
@@ -79,23 +80,39 @@
 #define SIGNAL_MAX_RADIUS 20000 //TODO
 
 //definition of left and right lines ranges
-#define MAX_X_LINE_RIGHT(rows, cols) 0//TODO
-#define MIN_X_LINE_RIGHT(rows, cols) 0//TODO
-#define MAX_X_LINE_LEFT(rows, cols) 0//TODO
-#define MIN_X_LINE_LEFT(rows, cols) 0//TODO
+#define MAX_WIDTH_LINE(rows, cols) cols//TODO
+#define MIN_WIDTH_LINE(rows, cols) 0//TODO
+
+#define MAX_HEIGHT_LINE(rows, cols) rows//TODO
+#define MIN_HEIGHT_LINE(rows, cols) 0//TODO
 
 // definition of the references of left and right boundaries
-#define X_REF_LEFT(rows, cols) 0 //TODO
-#define X_REF_RIGHT(rows, cols) 0 //TODO
+#define X_REF_LEFT(rows, cols) cols/2 //TODO
+#define X_REF_RIGHT(rows, cols) cols/2 //TODO
 
+// conditions to recognie better the line contours
+#define MIN_CONTOURS_SIZE 8
+#define MAX_CONTOURS_SIZE 0xffffffff
 // define the controller's parameters
-#define KP 1
+#define KP 10
 
-// define the control remapping parameters
-#define CONTROL_MIN 0
-#define CONTROL_MAX 0
-#define PWM_MIN 0
-#define PWM_MAX 0
+// define the drive control remapping parameters
+#define DRIVE_CONTROL_MIN -5000.0
+#define DRIVE_CONTROL_MAX 5000.0
+#define DRIVE_PWM_MIN 7
+#define DRIVE_PWM_MAX 17
+
+// define the speed control remapping parameters
+#define SPEED_CONTROL_MIN -7200.0
+#define SPEED_CONTROL_MAX 7200.0
+#define SPEED_PWM_MIN 10
+#define SPEED_PWM_MAX 20
+
+//define the standard controls
+#define SPEED_ZERO_CONTROL 0//(SPEED_CONTROL_MAX+SPEED_CONTROL_MIN)/2
+#define DRIVE_ZERO_CONTROL 0//(DRIVE_CONTROL_MAX+DRIVE_CONTROL_MIN)/2
+//zero pwm +1
+#define SPEED_STANDARD_CONTROL SPEED_ZERO_CONTROL+(SPEED_CONTROL_MAX-SPEED_CONTROL_MIN)/(SPEED_PWM_MAX-SPEED_PWM_MIN)
 
 //define usb port
 #define USB_PORT "/dev/ttyACM0"
@@ -106,21 +123,17 @@ enum stati{FOLLOW_RIGHT=0, FOLLOW_LEFT};
 
 #define ASSIGN_SIGNAL_NAME(name, color, function) {name, color##1, color##2, function}
 
-struct ControlOutput {
-    int pwmSpeed;
-    int pwmDrive;
-};
 
 struct ColorRange {
     const char * signalName;
     CvScalar range1;
     CvScalar range2;
     //get the status and returns speed control
-    int (*SignalAction)(int&);
+    float (*SignalAction)(int&);
 };
 
 #include "SignalActions.h"
-static ColorRange signalColorRange[] = { ASSIGN_SIGNAL_NAME("TurnRight",GREEN,TurnRightAction), ASSIGN_SIGNAL_NAME("TurnLeft",RED,TurnLeftAction), 0 };
+static ColorRange signalColorRange[] = { ASSIGN_SIGNAL_NAME("TurnRight",GREEN,TurnRightAction), ASSIGN_SIGNAL_NAME("TurnLeft",ORANGE,TurnLeftAction), 0 };
 
 
 

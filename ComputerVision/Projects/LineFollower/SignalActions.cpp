@@ -39,12 +39,12 @@
 /*                           Method definitions                              */
 /*---------------------------------------------------------------------------*/
 	
-int TurnLeftAction(int & status){
+float TurnLeftAction(int & status){
     status=FOLLOW_LEFT;
-    return 0; //TODO standard speed
+    return SPEED_STANDARD_CONTROL;
 }
 
-int TurnRightAction(int & status){
+float TurnRightAction(int & status){
     status=FOLLOW_RIGHT;
-    return 0; //TODO standard speed
+    return SPEED_STANDARD_CONTROL;
 }
