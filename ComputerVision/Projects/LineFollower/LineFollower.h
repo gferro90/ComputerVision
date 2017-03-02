@@ -31,7 +31,7 @@
 #include <highgui.h>
 #include <cxcore.h>
 #include <opencv2/core/core.hpp>
-#include <opencv2/imgcodecs.hpp>
+//#include <opencv2/imgcodecs.hpp>
 #include <opencv2/highgui/highgui.hpp>
 #include "opencv2/imgproc/imgproc.hpp"
 #include <stdio.h>
@@ -57,21 +57,29 @@
 
 
 #define CAMERA 0
+//#define SHOW_IMAGES
+#define CALIBRATE
+
+//black line threshold
+#define LINE_THRES 200
+
+//black line threshold
+#define LINE_THRES_TYPE 0
 
 //definitions of HSV color ranges for signal recognition
-#define BLUE1 cvScalar(0, 0, 0, 0) //TODO
-#define BLUE2 cvScalar(0, 0, 0, 0) //TODO
+#define BLUE1 Scalar(0, 0, 0) //TODO
+#define BLUE2 Scalar(0, 0, 0) //TODO
 
-#define GREEN1 cvScalar(0, 0, 0, 0) //TODO
-#define GREEN2 cvScalar(0, 0, 0, 0) //TODO
+#define GREEN1 cv::Scalar(88, 149, 207) //TODO
+#define GREEN2 cv::Scalar(102, 190, 255) //TODO
 
 
-#define ORANGE1 cvScalar(11, 133, 179, 0)//TODO
-#define ORANGE2 cvScalar(128, 190, 235, 0)//TODO
+#define ORANGE1 cv::Scalar(4, 63, 247)//TODO
+#define ORANGE2 cv::Scalar(32, 120, 255)//TODO
 
 //definition of the line follower band
-#define LINE_BAND_X(rows, cols) 10
-#define LINE_BAND_Y(rows, cols) ((2 * rows) / 3)
+#define LINE_BAND_X(rows, cols) 0
+#define LINE_BAND_Y(rows, cols) ((rows) / 2)
 #define LINE_BAND_WIDTH(rows, cols) (cols - 2*(LINE_BAND_X(rows,cols)))
 #define LINE_BAND_HEIGHT(rows, cols) (rows / 12)
 
@@ -80,39 +88,41 @@
 #define SIGNAL_MAX_RADIUS 20000 //TODO
 
 //definition of left and right lines ranges
-#define MAX_WIDTH_LINE(rows, cols) cols//TODO
-#define MIN_WIDTH_LINE(rows, cols) 0//TODO
+#define WIDTH_LINE(rows, cols) 37//TODO
+#define MAX_WIDTH_LINE(rows, cols) 10//TODO
+#define MIN_WIDTH_LINE(rows, cols) -4//TODO
 
-#define MAX_HEIGHT_LINE(rows, cols) rows//TODO
+#define HEIGHT_LINE(rows, cols) 37//TODO
+#define MAX_HEIGHT_LINE(rows, cols) 0//TODO
 #define MIN_HEIGHT_LINE(rows, cols) 0//TODO
 
 // definition of the references of left and right boundaries
-#define X_REF_LEFT(rows, cols) cols/2 //TODO
-#define X_REF_RIGHT(rows, cols) cols/2 //TODO
+#define X_REF_LEFT(rows, cols) cols/2-136 //TODO
+#define X_REF_RIGHT(rows, cols) cols/2+136 //TODO
 
 // conditions to recognie better the line contours
-#define MIN_CONTOURS_SIZE 8
+#define MIN_CONTOURS_SIZE 0
 #define MAX_CONTOURS_SIZE 0xffffffff
 // define the controller's parameters
-#define KP 10
+#define KP 30
 
 // define the drive control remapping parameters
 #define DRIVE_CONTROL_MIN -5000.0
 #define DRIVE_CONTROL_MAX 5000.0
-#define DRIVE_PWM_MIN 7
-#define DRIVE_PWM_MAX 17
+#define DRIVE_PWM_MIN 70
+#define DRIVE_PWM_MAX 170
 
 // define the speed control remapping parameters
 #define SPEED_CONTROL_MIN -7200.0
 #define SPEED_CONTROL_MAX 7200.0
-#define SPEED_PWM_MIN 10
-#define SPEED_PWM_MAX 20
+#define SPEED_PWM_MIN 100
+#define SPEED_PWM_MAX 200
 
 //define the standard controls
 #define SPEED_ZERO_CONTROL 0//(SPEED_CONTROL_MAX+SPEED_CONTROL_MIN)/2
 #define DRIVE_ZERO_CONTROL 0//(DRIVE_CONTROL_MAX+DRIVE_CONTROL_MIN)/2
 //zero pwm +1
-#define SPEED_STANDARD_CONTROL SPEED_ZERO_CONTROL+(SPEED_CONTROL_MAX-SPEED_CONTROL_MIN)/(SPEED_PWM_MAX-SPEED_PWM_MIN)
+#define SPEED_STANDARD_CONTROL SPEED_ZERO_CONTROL+5*(SPEED_CONTROL_MAX-SPEED_CONTROL_MIN)/(SPEED_PWM_MAX-SPEED_PWM_MIN)
 
 //define usb port
 #define USB_PORT "/dev/ttyACM0"
@@ -123,11 +133,12 @@ enum stati{FOLLOW_RIGHT=0, FOLLOW_LEFT};
 
 #define ASSIGN_SIGNAL_NAME(name, color, function) {name, color##1, color##2, function}
 
+#define ABS_VAL(a) ((a)>0)?(a):(-(a))
 
 struct ColorRange {
     const char * signalName;
-    CvScalar range1;
-    CvScalar range2;
+    cv::Scalar range1;
+    cv::Scalar range2;
     //get the status and returns speed control
     float (*SignalAction)(int&);
 };
