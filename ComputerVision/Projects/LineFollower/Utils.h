@@ -68,6 +68,7 @@ int FollowLine(Mat &lineBandGreyThres,
 	       int &refRight,
                int &width,
                int &height,
+               int &speedControl,
 	       bool calibrate);
 
 #endif /* COMPUTERVISION_PROJECTS_LINEFOLLOWER_UTILS_H_ */

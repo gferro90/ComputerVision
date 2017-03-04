@@ -70,12 +70,12 @@
 #define BLUE1 Scalar(0, 0, 0) //TODO
 #define BLUE2 Scalar(0, 0, 0) //TODO
 
-#define GREEN1 cv::Scalar(88, 149, 207) //TODO
-#define GREEN2 cv::Scalar(102, 190, 255) //TODO
+#define GREEN1 cv::Scalar(71, 150, 99) //TODO
+#define GREEN2 cv::Scalar(98, 250, 235) //TODO
 
 
-#define ORANGE1 cv::Scalar(4, 63, 247)//TODO
-#define ORANGE2 cv::Scalar(32, 120, 255)//TODO
+#define ORANGE1 cv::Scalar(1, 103, 209)//TODO
+#define ORANGE2 cv::Scalar(38, 190, 255)//TODO
 
 //definition of the line follower band
 #define LINE_BAND_X(rows, cols) 0
@@ -89,7 +89,7 @@
 
 //definition of left and right lines ranges
 #define WIDTH_LINE(rows, cols) 37//TODO
-#define MAX_WIDTH_LINE(rows, cols) 10//TODO
+#define MAX_WIDTH_LINE(rows, cols) cols//TODO
 #define MIN_WIDTH_LINE(rows, cols) -4//TODO
 
 #define HEIGHT_LINE(rows, cols) 37//TODO
@@ -128,6 +128,15 @@
 #define USB_PORT "/dev/ttyACM0"
 // define usb baud rate
 #define USB_BAUDRATE 115200
+
+
+#define CALIBRATE_CYCLES 60
+//number of cycles before stop if no lines detected
+#define ZERO_LINE_CYCLES 60
+
+#define PWM_SPEED_REMAP(control) PwmRemapping(control, SPEED_CONTROL_MIN, SPEED_CONTROL_MAX, SPEED_PWM_MIN, SPEED_PWM_MAX)
+#define PWM_DRIVE_REMAP(control) PwmRemapping(control, DRIVE_CONTROL_MIN, DRIVE_CONTROL_MAX, DRIVE_PWM_MIN, DRIVE_PWM_MAX)
+
 
 enum stati{FOLLOW_RIGHT=0, FOLLOW_LEFT};
 

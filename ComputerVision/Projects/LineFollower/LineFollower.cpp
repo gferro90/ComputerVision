@@ -49,8 +49,7 @@ static const char* signalAction[] = { "TurnLeft", "TurnRight", 0 };
 int main(int argc,
          char* argv[]) {
     //parameters of the image we are working on
-    int height = 0;
-    int width = 0;
+
     int step;
     int channels = 0;
     // ranges of HSV boundaries
@@ -75,24 +74,9 @@ int main(int argc,
      }
      */
     // Create a window in which the captured images will be presented
-#ifdef SHOW_IMAGES
-
-    namedWindow("Camera", WINDOW_AUTOSIZE);
-    namedWindow("HSV", WINDOW_AUTOSIZE);
-    namedWindow("lineBandGreyThres", WINDOW_AUTOSIZE);
-
-    // Create trackbars to threshold the line for the line follower
-    char* trackbar_value = "Value";
-    int const max_value = 255;
-    int threshold_type = 1;
-
-    createTrackbar(trackbar_value, "lineBandGreyThres", &threshold_value, max_value, NULL);
-#endif
-
 // grab an image from the capture
-
     Mat frameMat;
-    for (int i = 0; i < 10; i++) {
+    for (int i = 0; i < CALIBRATE_CYCLES; i++) {
         capture >> frameMat;
     }
 
@@ -112,17 +96,69 @@ int main(int argc,
     //create the image band
     Rect rect(LINE_BAND_X(frameMat.rows, frameMat.cols), LINE_BAND_Y(frameMat.rows, frameMat.cols), LINE_BAND_WIDTH(frameMat.rows, frameMat.cols),
               LINE_BAND_HEIGHT(frameMat.rows, frameMat.cols));
-    cv::Mat lineBand(frameMat, rect);
+    Mat lineBand(frameMat, rect);
 
-    Mat hsv_frame;
-    Mat thresholded;
+    Mat hsv_frame(lineBand.size(), CV_8UC3);
+    Mat thresholded(lineBand.size(), CV_8UC1);
 
     cvtColor(lineBand, hsv_frame, CV_BGR2HSV);
 
     //create images for gryscale and thresholded grayscale
-    Mat lineBandGrey;
-    Mat lineBandGreyThres;
+    Mat lineBandGrey(lineBand.size(), CV_8UC1);
+    Mat lineBandGreyThres(lineBand.size(), CV_8UC1);
 
+#ifdef SHOW_IMAGES
+
+    namedWindow("Camera", WINDOW_AUTOSIZE);
+    namedWindow("HSV", WINDOW_AUTOSIZE);
+    namedWindow("Thresholded", WINDOW_AUTOSIZE);
+    namedWindow("lineBandGreyThres", WINDOW_AUTOSIZE);
+
+    // Create trackbars to threshold the line for the line follower
+    char* trackbar_value = "Value";
+    int const max_value = 255;
+
+    createTrackbar(trackbar_value, "lineBandGreyThres", &threshold_value, max_value, NULL);
+#else
+    if (argc > 1) {
+        if (strncmp(argv[1], "-show", strlen("-show")) == 0) {
+            namedWindow("lineBandGreyThres", WINDOW_AUTOSIZE);
+
+            // Create trackbars to threshold the line for the line follower
+            char* trackbar_value = "Value";
+            int const max_value = 255;
+
+            createTrackbar(trackbar_value, "lineBandGreyThres", &threshold_value, max_value, NULL);
+
+            while (1) {
+                // Get one frame
+                capture >> frameMat;
+                //convert RGB to grayscale
+                cvtColor(lineBand, lineBandGrey, CV_BGR2GRAY);
+
+                //threshold the grayscale to detect the line
+                threshold(lineBandGrey, lineBandGreyThres, threshold_value, 255, LINE_THRES_TYPE);
+
+                imshow("lineBandGreyThres", lineBandGreyThres);
+                if ((cvWaitKey(5) & 255) == 27) {
+                    //destroyWindow("lineBandGreyThres");
+                    break;
+                }
+            }
+        }
+    }
+
+#endif
+    /*
+     Mat hsv_frame;
+     Mat thresholded;
+
+     cvtColor(lineBand, hsv_frame, CV_BGR2HSV);
+
+     //create images for gryscale and thresholded grayscale
+     Mat lineBandGrey;
+     Mat lineBandGreyThres;
+     */
     // Covert color space to HSV as it is much easier to filter colors in the HSV color-space.
     cvtColor(lineBand, hsv_frame, CV_BGR2HSV);
 
@@ -136,17 +172,25 @@ int main(int argc,
     int refLeft = 0;
     int refRight = 0;
     int lineWidth = 0;
-    int lineHeight = 0;
+    int lineHeight = HEIGHT_LINE(lineBandGreyThres.rows, lineBandGreyThres.cols);
+
+    int speedControl = PWM_SPEED_REMAP(SPEED_STANDARD_CONTROL);
+    int driveControl = PWM_DRIVE_REMAP(DRIVE_ZERO_CONTROL);
+    short int controls = 0;
+
 #ifdef CALIBRATE
-    FollowLine(lineBandGreyThres, lineBandGreyThres.cols + 1, 0, LINE_BAND_Y(frameMat.rows, frameMat.cols), 0, status, refLeft, refRight, lineWidth, lineHeight,
-               true);
+    if (FollowLine(lineBandGreyThres, lineBandGreyThres.cols, 0, lineBandGreyThres.rows, 0, status, refLeft, refRight, lineWidth, lineHeight, speedControl,
+                   true) < 0) {
+        printf("Calibration Error!\n");
+        return -1;
+    }
     printf("Calibration Results: \nrefLeft=%d \nrefRight=%d \nlineWidth=%d \nlineHeight=%d", refLeft, refRight, lineWidth, lineHeight);
 #endif
 
     if (usbFD > 0) {
-        int speedControl = PwmRemapping(SPEED_ZERO_CONTROL, SPEED_CONTROL_MIN, SPEED_CONTROL_MAX, SPEED_PWM_MIN, SPEED_PWM_MAX);
-        short int controls = (speedControl << 8);
-        int driveControl = PwmRemapping(DRIVE_ZERO_CONTROL, DRIVE_CONTROL_MIN, DRIVE_CONTROL_MAX, DRIVE_PWM_MIN, DRIVE_PWM_MAX);
+        speedControl = PWM_SPEED_REMAP(SPEED_ZERO_CONTROL);
+        controls = (speedControl << 8);
+        driveControl = PWM_DRIVE_REMAP(DRIVE_ZERO_CONTROL);
         controls |= driveControl;
         if (write(usbFD, &controls, sizeof(controls)) < 0) {
             printf("\nUSB write ERROR!\n");
@@ -159,10 +203,8 @@ int main(int argc,
 
         //WIP
 
-        int speedControl = PwmRemapping(SPEED_STANDARD_CONTROL, SPEED_CONTROL_MIN, SPEED_CONTROL_MAX, SPEED_PWM_MIN, SPEED_PWM_MAX);
-
-        int driveControl = PwmRemapping(DRIVE_ZERO_CONTROL, DRIVE_CONTROL_MIN, DRIVE_CONTROL_MAX, DRIVE_PWM_MIN, DRIVE_PWM_MAX);
-
+        speedControl = PWM_SPEED_REMAP(SPEED_STANDARD_CONTROL);
+        driveControl = PWM_DRIVE_REMAP(DRIVE_ZERO_CONTROL);
         // Get one frame
         capture >> frameMat;
 
@@ -175,7 +217,7 @@ int main(int argc,
          break;
          }
          */
-#ifdef DOPO
+
         int i = 0;
         while (signalAction[i] != NULL) {
             // query the color range
@@ -185,12 +227,10 @@ int main(int argc,
                 // detect the circle
                 // depending on the signal detected do something
                 speedControl = DetectSignal(hsv_frame, thresholded, *signal, status);
-                //assume one signal per time
-                break;
             }
             i++;
         }
-#endif
+
         //convert RGB to grayscale
         cvtColor(lineBand, lineBandGrey, CV_BGR2GRAY);
 
@@ -204,10 +244,10 @@ int main(int argc,
         lineHeight=HEIGHT_LINE;
 #endif
 
-        driveControl = FollowLine(lineBandGreyThres, lineBandGreyThres.cols + 1, 0, LINE_BAND_Y(frameMat.rows, frameMat.cols), 0, status, refLeft, refRight,
-                                  lineWidth, lineHeight, false);
+        driveControl = FollowLine(lineBandGreyThres, lineBandGreyThres.cols + 1, 0, lineBandGreyThres.rows, 0, status, refLeft, refRight, lineWidth, lineHeight,
+                                  speedControl, false);
 
-        short int controls = (speedControl << 8);
+        controls = (speedControl << 8);
         controls |= driveControl;
 
         printf("controls %d %d\n", speedControl, driveControl);
@@ -216,16 +256,17 @@ int main(int argc,
         }
 #ifdef SHOW_IMAGES
         imshow("Camera", frameMat); // Original stream with detected ball overlay
-        imshow("HSV", hsv_frame); // Original stream in the HSV color space
+        imshow("HSV", hsv_frame);// Original stream in the HSV color space
+        imshow("Thresholded", thresholded);// Original stream in the HSV color space
         imshow("lineBandGreyThres", lineBandGreyThres);
-#endif
+
         //If ESC key pressed, Key=0x10001B under OpenCV 0.9.7(linux version),
         //remove higher bits using AND operator
 
         if ((cvWaitKey(5) & 255) == 27) {
-            speedControl = PwmRemapping(SPEED_ZERO_CONTROL, SPEED_CONTROL_MIN, SPEED_CONTROL_MAX, SPEED_PWM_MIN, SPEED_PWM_MAX);
+            speedControl = PWM_SPEED_REMAP(SPEED_ZERO_CONTROL);
             controls = (speedControl << 8);
-            driveControl = PwmRemapping(DRIVE_ZERO_CONTROL, DRIVE_CONTROL_MIN, DRIVE_CONTROL_MAX, DRIVE_PWM_MIN, DRIVE_PWM_MAX);
+            driveControl = PWM_DRIVE_REMAP(DRIVE_ZERO_CONTROL);
             controls |= driveControl;
             if (write(usbFD, &controls, sizeof(controls)) < 0) {
                 printf("\nUSB write ERROR!\n");
@@ -233,6 +274,28 @@ int main(int argc,
             break;
         }
 
+#else
+
+        if (argc > 1) {
+            if (strcmp(argv[1], "-show_online") == 0) {
+
+                //threshold the grayscale to detect the line
+                threshold(lineBandGrey, lineBandGreyThres, threshold_value, 255, LINE_THRES_TYPE);
+                imshow("lineBandGreyThres", lineBandGreyThres);
+
+                if ((cvWaitKey(5) & 255) == 27) {
+                    speedControl = PWM_SPEED_REMAP(SPEED_ZERO_CONTROL);
+                    controls = (speedControl << 8);
+                    driveControl = PWM_DRIVE_REMAP(DRIVE_ZERO_CONTROL);
+                    controls |= driveControl;
+                    if (write(usbFD, &controls, sizeof(controls)) < 0) {
+                        printf("\nUSB write ERROR!\n");
+                    }
+                    break;
+                }
+            }
+        }
+#endif
     }
 #ifdef SHOW_IMAGES
 
