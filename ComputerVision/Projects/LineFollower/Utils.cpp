@@ -167,21 +167,10 @@ int DetectSignal(Mat &hsv_frame,
             consecutiveWhiteCnt = 0;
         }
     }
-    if (maxConsecutiveWhite > 5) {
+    if (maxConsecutiveWhite > SIGNAL_MIN_WIDTH) {
         speedControl = colorRange.SignalAction((int&) status);
         printf("\ndetected signal for %s\n", colorRange.signalName);
     }
-
-    /*    findContours(thresholded, contours, hierarchy, CV_RETR_TREE, CV_CHAIN_APPROX_SIMPLE, Point(0, 0));
-
-     if(contours.size()>0){
-     speedControl = colorRange.SignalAction((int&) status);
-     printf("\ndetected signal for %s\n", colorRange.signalName);
-
-     }
-     */
-    /* for testing purpose you can show all the images but when done with calibration
-     only show frame to keep the screen clean  */
 
     return PWM_SPEED_REMAP(speedControl);
 }

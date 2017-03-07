@@ -124,6 +124,9 @@
 //zero pwm +1
 #define SPEED_STANDARD_CONTROL SPEED_ZERO_CONTROL+5*(SPEED_CONTROL_MAX-SPEED_CONTROL_MIN)/(SPEED_PWM_MAX-SPEED_PWM_MIN)
 
+//the minimum width for the signal band
+#define SIGNAL_MIN_WIDTH 20
+
 //define usb port
 #define USB_PORT "/dev/ttyACM0"
 // define usb baud rate
