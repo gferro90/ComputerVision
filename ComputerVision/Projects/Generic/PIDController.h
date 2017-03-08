@@ -38,7 +38,7 @@
 
 class PIDController: public Controller {
 public:
-    PIDController(float KpIn=0.,float KiIn=0.,float KdIn=0.);
+    PIDController(float KpIn=0.,float KiIn=0.,float KdIn=0., float error_0=0.);
 
     virtual ~PIDController();
 
@@ -47,6 +47,8 @@ private:
     float Kp;
     float Ki;
     float Kd;
+    float integral;
+    float error_1;
 };
 
 /*---------------------------------------------------------------------------*/

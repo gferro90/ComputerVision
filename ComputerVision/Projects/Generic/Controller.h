@@ -1,6 +1,6 @@
 /**
- * @file PIDController.cpp
- * @brief Source file for class PIDController
+ * @file Controller.h
+ * @brief Header file for class Controller
  * @date 23/feb/2017
  * @author pc
  *
@@ -16,46 +16,40 @@
  * basis, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express
  * or implied. See the Licence permissions and limitations under the Licence.
 
- * @details This source file contains the definition of all the methods for
- * the class PIDController (public, protected, and private). Be aware that some 
- * methods, such as those inline could be defined on the header file, instead.
+ * @details This header file contains the declaration of the class Controller
+ * with all of its public, protected and private members. It may also include
+ * definitions for inline methods which need to be visible to the compiler.
  */
 
-/*---------------------------------------------------------------------------*/
-/*                         Standard header includes                          */
-/*---------------------------------------------------------------------------*/
+#ifndef COMPUTERVISION_PROJECTS_LINEFOLLOWER_CONTROLLER_H_
+#define 		COMPUTERVISION_PROJECTS_LINEFOLLOWER_CONTROLLER_H_
 
 /*---------------------------------------------------------------------------*/
-/*                         Project header includes                           */
-/*---------------------------------------------------------------------------*/
-
-#include "PIDController.h"
-
-/*---------------------------------------------------------------------------*/
-/*                           Static definitions                              */
+/*                        Standard header includes                           */
 /*---------------------------------------------------------------------------*/
 
 /*---------------------------------------------------------------------------*/
-/*                           Method definitions                              */
+/*                        Project header includes                            */
 /*---------------------------------------------------------------------------*/
 
-PIDController::PIDController(float KpIn,
-                             float KiIn,
-                             float KdIn) :
-        Controller() {
-    Kp = KpIn;
-    Ki = KiIn;
-    Kd = KdIn;
+/*---------------------------------------------------------------------------*/
+/*                           Class declaration                               */
+/*---------------------------------------------------------------------------*/
 
-}
+class Controller {
+public:
+    Controller(){
 
-PIDController::~PIDController() {
-    // Auto-generated destructor stub for PIDController
-    // TODO Verify if manual additions are needed
-}
+    };
+    virtual ~Controller(){
 
-float PIDController::Execute(float error, float dt) {
+    };
+    virtual float Execute(float error, float dt)=0;
+};
 
-    return Kp * error;
-    //TODO Ki and Kd
-}
+/*---------------------------------------------------------------------------*/
+/*                        Inline method definitions                          */
+/*---------------------------------------------------------------------------*/
+
+#endif /* COMPUTERVISION_PROJECTS_LINEFOLLOWER_CONTROLLER_H_ */
+

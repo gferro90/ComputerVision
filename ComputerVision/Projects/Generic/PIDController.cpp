@@ -41,12 +41,14 @@
 
 PIDController::PIDController(float KpIn,
                              float KiIn,
-                             float KdIn) :
+                             float KdIn,
+                             float error_0) :
         Controller() {
     Kp = KpIn;
     Ki = KiIn;
     Kd = KdIn;
-
+    error_1 = error_0;
+    integral = 0.;
 }
 
 PIDController::~PIDController() {
@@ -54,8 +56,14 @@ PIDController::~PIDController() {
     // TODO Verify if manual additions are needed
 }
 
-float PIDController::Execute(float error, float dt) {
+float PIDController::Execute(float error,
+                             float dt) {
 
-    return Kp * error;
-    //TODO Ki and Kd
+    float prop = Kp * error;
+    float der = 0.;
+    if (dt != 0.) {
+        der = Kd * (error - error_1) / dt;
+        integral += Ki * error * dt;
+    }
+    return prop + der + integral;
 }

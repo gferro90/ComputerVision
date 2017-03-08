@@ -1,6 +1,6 @@
 
 #source code to be compiled here
-OBJSX= main.x	
+OBJSX= main.x ../Generic/PIDController.x
 
 #paths of other projects makefiles
 SPB = 
@@ -25,8 +25,9 @@ include $(MAKEDEFAULTDIR)/MakeStdLibDefs.$(TARGET)
 #add other CFLAGS if needed
 #CFLAGS +=
 
-#add other includes if needed 
-INCLUDES = -I/home/pc/OpenCV/opencv-3.0.0/include/opencv2
+#add other includes if needed
+INCLUDES = -I../Generic
+INCLUDES += -I/home/pc/OpenCV/opencv-3.0.0/include/opencv2
 INCLUDES += -I/home/pc/OpenCV/opencv-3.0.0/include/opencv 
 INCLUDES += -I/home/pc/Kinect/kinect/OpenNI-OpenNI-e263e59/Include
 
