@@ -235,6 +235,36 @@ void CinematicaInversa(XnSkeletonJointPosition mano,
     angoli[0] = tograde(atan2(yy, xx));
 }
 
+
+#if 0
+void CinematicaInversa(myCoords coords,
+                       float* angoli) {
+    float xx, yy, zz, di, c2, s2, c1, s1, a, b;
+    xx = coords.x;
+    yy = coords.y;
+    zz = coords.z;
+
+    //out of the workspace
+    if ((xx * xx + yy * yy + zz * zz) >= (L1 * L1 + L2 * L2)) {
+        angoli[0]=RAD_TO_GRADE(atan2(yy, xx));
+        angoli[1] = RAD_TO_GRADE(atan2(zz, xx));
+        angoli[2] = RAD_TO_GRADE(atan2(zz, xx));
+    }
+    else {
+        di = sqrt(xx * xx + yy * yy);
+        c2 = (di * di + zz * zz - L1 * L1 - L2 * L2) / (2 * L1 * L2);
+        s2 = GOMITO*sqrt(1 - c2 * c2);
+        angoli[2] = RAD_TO_GRADE(atan2(s2, c2));
+        a = c2 * L2 + L1;
+        b = s2 * L2;
+        c1 = (zz * b + di * a) / (a * a + b * b);
+        s1 = (c1 * a - di) / b;
+        angoli[1] = RAD_TO_GRADE(atan2(s1, c1));
+        angoli[0] = RAD_TO_GRADE(atan2(yy, xx));
+    }
+    angoli[3]=angoli[2];
+}
+#endif
 void CalcolaAngoli(XnSkeletonJointPosition mano,
                    XnSkeletonJointPosition gomito,
                    XnSkeletonJointPosition spalla,
