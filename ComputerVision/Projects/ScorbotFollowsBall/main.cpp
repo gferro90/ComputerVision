@@ -45,7 +45,6 @@
 #include <sys/time.h>
 #include "PIDController.h"
 
-
 #include </usr/include/sys/types.h>
 #include </usr/include/sys/socket.h>
 #include </usr/include/sys/signal.h>
@@ -72,8 +71,8 @@ using namespace std;
 #define DISPLAY_MODE_IMAGE		3
 #define DEFAULT_DISPLAY_MODE	DISPLAY_MODE_DEPTH
 
-#define MAX_RADIUS 400
-#define MIN_RADIUS 10
+#define MAX_RADIUS 100
+#define MIN_RADIUS 5
 
 #define SPEED 500.f //100 pixel per second
 #define RAD_TO_GRADE(x) ((x)/M_PI)*180
@@ -191,19 +190,28 @@ bool IsGood(const myCoords &coords,
 void CinematicaInversa(myCoords coords,
                        float* angoli) {
     float xx, yy, zz, di, c2, s2, c1, s1, a, b;
-    xx = -coords.x;
+    xx = coords.x;
     yy = -coords.y;
     zz = coords.z;
-    di = sqrt(xx * xx + yy * yy);
-    c2 = (di * di + zz * zz - L1 * L1 - L2 * L2) / (2 * L1 * L2);
-    s2 = sqrt(1 - c2 * c2);
-    angoli[2] = RAD_TO_GRADE(atan2(s2, c2));
-    a = c2 * L2 + L1;
-    b = s2 * L2;
-    c1 = (zz * b + di * a) / (a * a + b * b);
-    s1 = (c1 * a - di) / b;
-    angoli[1] = RAD_TO_GRADE(atan2(s1, c1));
-    angoli[0] = RAD_TO_GRADE(atan2(yy, xx));
+
+    //out of the workspace
+    if ((xx * xx + yy * yy + zz * zz) >= (L1 * L1 + L2 * L2)) {
+        angoli[0]=RAD_TO_GRADE(atan2(yy, xx));
+        angoli[1] = RAD_TO_GRADE(atan2(zz, xx));
+        angoli[2] = RAD_TO_GRADE(atan2(zz, xx));
+    }
+    else {
+        di = sqrt(xx * xx + yy * yy);
+        c2 = (di * di + zz * zz - L1 * L1 - L2 * L2) / (2 * L1 * L2);
+        s2 = sqrt(1 - c2 * c2);
+        angoli[2] = RAD_TO_GRADE(atan2(s2, c2));
+        a = c2 * L2 + L1;
+        b = s2 * L2;
+        c1 = (zz * b + di * a) / (a * a + b * b);
+        s1 = (c1 * a - di) / b;
+        angoli[1] = RAD_TO_GRADE(atan2(s1, c1));
+        angoli[0] = RAD_TO_GRADE(atan2(yy, xx));
+    }
 }
 
 void CinematicaDiretta(float *angoli,
@@ -469,8 +477,8 @@ int main(int argc,
         armLostTime += dt;
         ballLostTime += dt;
 
-        printf("\narmLostTime=%f\n", armLostTime);
-        printf("\nballLostTime=%f\n", ballLostTime);
+        //printf("\narmLostTime=%f\n", armLostTime);
+        //printf("\nballLostTime=%f\n", ballLostTime);
 
         gettimeofday(&start, NULL);
 
@@ -492,11 +500,11 @@ int main(int argc,
 
             if (calibrationDone) {
                 if (IsGood(armCoords, armLostTime, speed, frame.rows, frame.cols)) {
-                    printf("Ball! x=%d y=%d z=%d r=%d\n\r", cvRound(armCoords.x), cvRound(armCoords.y), cvRound(armCoords.z), cvRound(armCoords.radius));
+                    printf("Arm! x=%d y=%d z=%d r=%d\n\r", cvRound(armCoords.x), cvRound(armCoords.y), cvRound(armCoords.z), cvRound(armCoords.radius));
                     // draw a circle with the centre and the radius obtained from the hough transform
                     circle(frame, Point(cvRound(armCoords.x), cvRound(armCoords.y)), 2, Scalar(255, 255, 255), -1, 8, 0);   //plot centre
                     circle(frame, Point(cvRound(armCoords.x), cvRound(armCoords.y)), cvRound(armCoords.radius), Scalar(0, 255, 0), 3, 8, 0);   //plot circle
-                    putText(frame, "Scorbot Arm", Point(cvRound(armCoords.x), cvRound(armCoords.y)), FONT_HERSHEY_PLAIN, 1.0, CV_RGB(0, 255, 0), 2.0);
+                    putText(frame, "Scorbot Arm", Point(cvRound(armCoords.x), cvRound(armCoords.y)), FONT_HERSHEY_PLAIN, 1.0, CV_RGB(0, 0, 0), 2.0);
                     //the arm has been found... break
 
                     armCoords.x_1 = armCoords.x;
@@ -595,33 +603,41 @@ int main(int argc,
         }
 
         //CONTROL
+        if (calibrationDone) {
+            //read angles from remote
+            myCoords gripperPos;
+            float angoli[4];
+            if (idSock > 0) {
+                if (read(idSock, angoli, sizeof(angoli)) > 0) {
+                    myCoords cameraError;
+                    cameraError.x = (ballCoords.x - armCoords.x);
+                    cameraError.y = (ballCoords.y - armCoords.y);
+                    cameraError.z = (ballCoords.z - armCoords.z);
 
-        //read angles from remote
-        myCoords gripperPos;
-        float angoli[4];
-        if (idSock > 0) {
-            if (read(idSock, angoli, sizeof(angoli)) > 0) {
-                myCoords cameraError;
-                cameraError.x = (ballCoords.x - armCoords.x);
-                cameraError.y = (ballCoords.y - armCoords.y);
-                cameraError.z = (ballCoords.z - armCoords.z);
+                    PIDController pid(KP);
+                    //compute the current scorbot gripper position
+                    CinematicaDiretta(angoli, gripperPos);
 
-                PIDController pid(KP);
-                //compute the current scorbot gripper position
-                CinematicaDiretta(angoli, gripperPos);
+                    //mem copy
+                    myCoords newGripperRef = gripperPos;
 
-                //mem copy
-                myCoords newGripperRef = gripperPos;
+                    //add an error to the current position proportional to the camera error
 
-                //add an error to the current position proportional to the camera error
-                newGripperRef.x += pid.Execute(cameraError.x, dt);
-                newGripperRef.y += pid.Execute(cameraError.y, dt);
-                newGripperRef.z += pid.Execute(cameraError.z, dt);
+                     newGripperRef.x += pid.Execute(-cameraError.x, dt);
+                     newGripperRef.z += pid.Execute(-cameraError.y, dt);
+                     newGripperRef.y += cameraError.z;//pid.Execute(cameraError.z, dt);
+/*
+                    newGripperRef.x = 400;
+                    newGripperRef.y = 400;
+                    newGripperRef.z = 200;
+*/
+                    //compute the inverse kinematic
 
-                //compute the inverse kinematic
+                    CinematicaInversa(newGripperRef, angoli);
+                    //angoli[0]=-90;
 
-                CinematicaInversa(newGripperRef, angoli);
-                write(idSock, angoli, sizeof(angoli));
+                    write(idSock, angoli, sizeof(angoli));
+                }
             }
         }
 
