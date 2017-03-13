@@ -1,9 +1,10 @@
 <?xml version="1.0"?>
 <opencv_storage>
 <threshold_matrix type_id="opencv-matrix">
-  <rows>4</rows>
+  <rows>6</rows>
   <cols>3</cols>
   <dt>f</dt>
   <data>
-    164. 131. 104. 260. 241. 237. 12. 96. 211. 69. 260. 240.</data></threshold_matrix>
+    0. 160. 131. 6. 239. 229. 15. 137. 161. 48. 224. 260. 0. 100. 0. 14.
+    100. 0.</data></threshold_matrix>
 </opencv_storage>

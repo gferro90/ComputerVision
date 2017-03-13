@@ -77,11 +77,43 @@ static EGLContext context = EGL_NO_CONTEXT;
 #define GL_WIN_SIZE_X 720
 #define GL_WIN_SIZE_Y 480
 
+#define HAND_OPEN_LENGTH 30
+#define HAND_CLOSE_LENGTH 30
+
+#define L1 220
+#define L2 220
+#define L3 140
+
+#define GRIPPER 0x1
+#define CIN_INV 0x2
+
+#define MINIMUM_Z -100
+#define NUMBER_OF_ANGLES 6
+
+#define RAD_TO_GRADE(x) ((x)/M_PI)*180
+#define GRADE_TO_RAD(x) ((x)/180)*M_PI
+
+#define GOMITO -1
+
+#define PITCH -90
+
+#define IP "160.80.86.195"
+#define PORT 4444
+
+//---------------------------------------------------------------------------
+// Global Variables
+//---------------------------------------------------------------------------
+
+int idsock = -1;
+float initialArmLength = 0.;
+
 XnBool g_bPause = false;
 XnBool g_bRecord = false;
 
 XnBool g_bQuit = false;
-int ok = 0;
+bool skeletonTracked = false;
+bool primavolta = true;
+int flag = 0;
 
 //---------------------------------------------------------------------------
 // Code
@@ -117,6 +149,7 @@ void XN_CALLBACK_TYPE User_LostUser(xn::UserGenerator& /*generator*/, XnUserID n
     XnUInt32 epochTime = 0;
     xnOSGetEpochTime(&epochTime);
     printf("%d Lost user %d\n", epochTime, nId);
+    skeletonTracked=false;
 }
 // Callback: Detected a pose
 void XN_CALLBACK_TYPE UserPose_PoseDetected(xn::PoseDetectionCapability& /*capability*/, const XnChar* strPose, XnUserID nId, void* /*pCookie*/)
@@ -129,7 +162,7 @@ void XN_CALLBACK_TYPE UserPose_PoseDetected(xn::PoseDetectionCapability& /*capab
 }
 // Callback: Started calibration
 void XN_CALLBACK_TYPE UserCalibration_CalibrationStart(xn::SkeletonCapability& /*capability*/, XnUserID nId, void* /*pCookie*/)
-{   ok=1;
+{
     XnUInt32 epochTime = 0;
     xnOSGetEpochTime(&epochTime);
     printf("%d Calibration started for user %d\n", epochTime, nId);
@@ -140,7 +173,7 @@ void XN_CALLBACK_TYPE UserCalibration_CalibrationComplete(xn::SkeletonCapability
     XnUInt32 epochTime = 0;
     xnOSGetEpochTime(&epochTime);
     if (eStatus == XN_CALIBRATION_STATUS_OK)
-    {   ok=1;
+    {   skeletonTracked=true;
         // Calibration succeeded
         printf("%d Calibration complete, start tracking user %d\n", epochTime, nId);
         g_UserGenerator.GetSkeletonCap().StartTracking(nId);
@@ -212,13 +245,10 @@ int sign(XnFloat a) {
         return 1;
 }
 
-float tograde(float angoli) {
-    return (angoli / 3.14) * 180;
-}
-
+#if 0
 void CinematicaInversa(XnSkeletonJointPosition mano,
-                       XnSkeletonJointPosition spalla,
-                       float* angoli) {
+        XnSkeletonJointPosition spalla,
+        float* angoli) {
     float xx, yy, zz, di, c2, s2, c1, s1, a, b, L1 = 220, L2 = 220;
     xx = -(mano.position.X - spalla.position.X);
     yy = -(mano.position.Z - spalla.position.Z);
@@ -234,42 +264,55 @@ void CinematicaInversa(XnSkeletonJointPosition mano,
     angoli[1] = tograde(atan2(s1, c1));
     angoli[0] = tograde(atan2(yy, xx));
 }
+#endif
 
-
-#if 0
-void CinematicaInversa(myCoords coords,
+void CinematicaInversa(XnSkeletonJointPosition mano,
+                       XnSkeletonJointPosition spalla,
                        float* angoli) {
     float xx, yy, zz, di, c2, s2, c1, s1, a, b;
-    xx = coords.x;
-    yy = coords.y;
-    zz = coords.z;
 
+    float diWrist = L3 * cos(GRADE_TO_RAD(PITCH));
+    float xx_grip = ((mano.position.X - spalla.position.X));
+    float yy_grip = -((mano.position.Z - spalla.position.Z));
+    float zz_grip = ((mano.position.Y - spalla.position.Y));
+
+    float yaw = atan2(yy_grip, xx_grip);
+
+    xx = xx_grip - diWrist * cos(yaw);
+    yy = yy_grip - diWrist * sin(yaw);
+    zz = zz_grip - L3 * sin(GRADE_TO_RAD(PITCH));
+
+    if (zz < MINIMUM_Z) {
+        zz = MINIMUM_Z;
+    }
+
+    angoli[0] = RAD_TO_GRADE(yaw);
+    printf("\nzz=%f\n", zz);
     //out of the workspace
     if ((xx * xx + yy * yy + zz * zz) >= (L1 * L1 + L2 * L2)) {
-        angoli[0]=RAD_TO_GRADE(atan2(yy, xx));
         angoli[1] = RAD_TO_GRADE(atan2(zz, xx));
         angoli[2] = RAD_TO_GRADE(atan2(zz, xx));
     }
     else {
         di = sqrt(xx * xx + yy * yy);
         c2 = (di * di + zz * zz - L1 * L1 - L2 * L2) / (2 * L1 * L2);
-        s2 = GOMITO*sqrt(1 - c2 * c2);
+        s2 = GOMITO * sqrt(1 - c2 * c2);
         angoli[2] = RAD_TO_GRADE(atan2(s2, c2));
         a = c2 * L2 + L1;
         b = s2 * L2;
         c1 = (zz * b + di * a) / (a * a + b * b);
-        s1 = (c1 * a - di) / b;
+        s1 = (zz- c1 * b) / a;
         angoli[1] = RAD_TO_GRADE(atan2(s1, c1));
-        angoli[0] = RAD_TO_GRADE(atan2(yy, xx));
+        angoli[2]+=angoli[1];
     }
-    angoli[3]=angoli[2];
+    angoli[3] = PITCH;
 }
-#endif
+
 void CalcolaAngoli(XnSkeletonJointPosition mano,
                    XnSkeletonJointPosition gomito,
                    XnSkeletonJointPosition spalla,
                    float* angoli) {
-    angoli[0] = atan2(mano.position.Z - spalla.position.Z, mano.position.X - spalla.position.X);
+    angoli[0] = atan2(-(mano.position.Z - spalla.position.Z), mano.position.X - spalla.position.X);
     angoli[1] = atan2(
             gomito.position.Y - spalla.position.Y,
             sign(gomito.position.X - spalla.position.X)
@@ -283,19 +326,18 @@ void CalcolaAngoli(XnSkeletonJointPosition mano,
     angoli[0] = (angoli[0] / 3.14) * 180;
     angoli[1] = (angoli[1] / 3.14) * 180;
     angoli[2] = (angoli[2] / 3.14) * 180;
+    angoli[3] = angoli[2];
 }
 
-int idsock = -1, primavolta = 0, h = 0, xx = 0, cc = 0, k = 0, manosi = 0, cinem = 0;
-double iniziale = 0;
-double distanza(XnSkeletonJointPosition mano,
-                XnSkeletonJointPosition dito) {
+float distanza(XnSkeletonJointPosition joint1,
+               XnSkeletonJointPosition joint2) {
     return sqrt(
-            (mano.position.X - dito.position.X) * (mano.position.X - dito.position.X)
-                    + (mano.position.Y - dito.position.Y) * (mano.position.Y - dito.position.Y)
-                    + (mano.position.Z - dito.position.Z) * (mano.position.Z - dito.position.Z));
+            (joint1.position.X - joint2.position.X) * (joint1.position.X - joint2.position.X)
+                    + (joint1.position.Y - joint2.position.Y) * (joint1.position.Y - joint2.position.Y)
+                    + (joint1.position.Z - joint2.position.Z) * (joint1.position.Z - joint2.position.Z));
 }
 
-void vabs(double* val) {
+void vabs(float* val) {
     if ((*val) < 0)
         (*val) *= -1;
 }
@@ -308,9 +350,10 @@ void glutDisplay() {
     XnUInt16 nUsers = 1;
     //XnUserID aUserIDs[1]={0};
     //XnUInt16 nUsers = 1;
-    float angoli[4];
-    int angolint;
-    double dd;
+    float angoli[NUMBER_OF_ANGLES];
+    memset(angoli, 0, sizeof(angoli));
+
+    static int gripper_open = 0;
 
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
@@ -340,59 +383,80 @@ void glutDisplay() {
     g_UserGenerator.GetUserPixels(0, sceneMD);
     DrawDepthMap(depthMD, sceneMD);
     g_UserGenerator.GetUsers(aUserIDs, nUsers);
-    XnSkeletonJointPosition mano, gomito, spalla;
-    g_UserGenerator.GetSkeletonCap().GetSkeletonJointPosition(aUserIDs[0], XN_SKEL_RIGHT_HAND, mano);
-    g_UserGenerator.GetSkeletonCap().GetSkeletonJointPosition(aUserIDs[0], XN_SKEL_RIGHT_ELBOW, gomito);
-    g_UserGenerator.GetSkeletonCap().GetSkeletonJointPosition(aUserIDs[0], XN_SKEL_RIGHT_SHOULDER, spalla);
+    if (/*(g_UserGenerator.GetUsers(aUserIDs, nUsers) == XN_STATUS_OK) &&*/ (skeletonTracked)) {
+        XnSkeletonJointPosition mano, gomito, spalla;
+        g_UserGenerator.GetSkeletonCap().GetSkeletonJointPosition(aUserIDs[0], XN_SKEL_RIGHT_HAND, mano);
+        g_UserGenerator.GetSkeletonCap().GetSkeletonJointPosition(aUserIDs[0], XN_SKEL_RIGHT_ELBOW, gomito);
+        g_UserGenerator.GetSkeletonCap().GetSkeletonJointPosition(aUserIDs[0], XN_SKEL_RIGHT_SHOULDER, spalla);
+        //printf("skeletonTracked=%d primavolta = %d\n", skeletonTracked, primavolta);
+        if ((primavolta) && (skeletonTracked)) {
+            printf("\nINITIALIZED!!\n");
+            initialArmLength = distanza(mano, gomito);
+            primavolta = false;
+        }
+        if ((flag & CIN_INV) == 0) {
+            CalcolaAngoli(mano, gomito, spalla, angoli);
+        }
+        else {
+            CinematicaInversa(mano, spalla, angoli);
+            for (int n = 0; n < NUMBER_OF_ANGLES; n++) {
+                printf("angolo[%d]=%f\n", n, angoli[n]);
 
-    if (primavolta == 0 && ok == 1) {
-        iniziale = distanza(mano, gomito);
-        primavolta = 1;
-    }
-    if (cinem == 0) {
-        CalcolaAngoli(mano, gomito, spalla, angoli);
-        angolint = (int) angoli[0];
-    }
-    else {
-        CinematicaInversa(mano, spalla, angoli);
-    }
-
-    if (ok == 1) {
-        dd = distanza(mano, gomito) - iniziale;
-        vabs(&dd);
-        if (manosi == 1) {
-            if (dd > 45 && xx == 0) {
-
-                xx = 1;
-
-                printf("mano aperta\n");
             }
-            else {
-                if (dd <= 45 && xx == 1) {
-                    xx = 0;
+            printf("\n");
+        }
 
-                    printf("mano chiusa\n");
+        float dArmLength;
+        if (skeletonTracked) {
+            dArmLength = distanza(mano, gomito) - initialArmLength;
+            vabs(&dArmLength);
+            if ((flag & GRIPPER) != 0) {
+                //printf("\ndist = %f, init=%f\n", dArmLength, initialArmLength);
+                if ((dArmLength > HAND_OPEN_LENGTH) && (gripper_open == 0)) {
+
+                    gripper_open = 1;
+
+                    printf("mano aperta\n");
+
+                }
+                else {
+                    if ((dArmLength <= HAND_CLOSE_LENGTH) && (gripper_open == 1)) {
+                        gripper_open = 0;
+
+                        printf("mano chiusa\n");
+                    }
+                }
+                if (gripper_open) {
+                    angoli[5] = 1.;
+                }
+                else {
+                    angoli[5] = 0.;
                 }
             }
-        }
-        if (cc <= 40)
+
+#if 0
+            if (cc <= 40)
             angoli[3] = memo;
 
-        if (cc > 40) {
-            angoli[3] = xx * 7.5 + 1.2;
-            memo = angoli[3];
-            cc = 0;
+            if (cc > 40) {
+                angoli[3] = xx * 7.5 + 1.2;
+                memo = angoli[3];
+                cc = 0;
+            }
+#endif
+            /*
+             printf("\n");
+             for (int i = 0; i < 4; i++) {
+             printf("angolo[%d]=%f", i, angoli[i]);
+             }
+             printf("\n%d", sizeof(angoli));*/
         }
-
-        printf("\n");
-        for (int i = 0; i < 4; i++) {
-            printf("angolo[%d]=%f", i, angoli[i]);
-        }
-        printf("\n%d", sizeof(angoli));
+    }
+    if(!primavolta){
         write(idsock, angoli, sizeof(angoli));
     }
 
-    cc++;
+    //cc++;
 #ifndef USE_GLES
     glutSwapBuffers();
 #endif
@@ -488,8 +552,8 @@ int connetti() {
     int lunghezza = sizeof(client);
     idsock = socket(AF_INET, SOCK_STREAM, 0);
     client.sin_family = AF_INET;
-    client.sin_port = htons(4444);
-    inet_aton("160.80.86.195", &(client.sin_addr));
+    client.sin_port = htons(PORT);
+    inet_aton(IP, &(client.sin_addr));
     if (connect(idsock, (struct sockaddr*) &client, sizeof(client)) == -1)
         return -1;
     else
@@ -502,10 +566,21 @@ int main(int argc,
 
     if ((idsock = connetti()) == -1)
         cout << "\n" << "ERRORE DI CONNESSIONE AL ROBOT\n";
+
+    for (int n = 1; n < argc; n++) {
+        if (strcmp(argv[n], "gripper") == 0) {
+            flag |= GRIPPER;
+        }
+        else if (strcmp(argv[n], "cin_inv") == 0) {
+            flag |= CIN_INV;
+        }
+    }
+
+#if 0
     if (argc == 2)
     //if (argc > 1)
-            {
-
+    {
+        printf("\nMANOOOOO\n");
         manosi = 1;
         /*nRetVal = g_Context.Init();
          CHECK_RC(nRetVal, "Init");
@@ -518,7 +593,8 @@ int main(int argc,
     }
 
     if (argc == 3)
-        cinem = 1;
+    cinem = 1;
+#endif
     //else
     //{
     xn::EnumerationErrors errors;

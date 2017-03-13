@@ -79,6 +79,7 @@ using namespace std;
 #define GRADE_TO_RAD(x) ((x)/180)*M_PI
 #define L1 220
 #define L2 220
+#define L3 140
 
 //gomito: alto=-1 basso=-1
 #define GOMITO -1
@@ -87,9 +88,19 @@ using namespace std;
 
 //define a deadzone radius of 2 cm
 #define DEADZONE_RADIUS 50
-#define X_CAM_DEADZONE 2
-#define Y_CAM_DEADZONE 2
-#define Z_CAM_DEADZONE 0
+#define X_CAM_DEADZONE 5
+#define Y_CAM_DEADZONE 5
+#define Z_CAM_DEADZONE 10
+
+#define MAX_ARM_LOST_TIME 0.5
+#define MAX_BALL_LOST_TIME 0.5
+
+#define NUMBER_OF_ANGLES 6
+
+#define IP "160.80.86.195"
+#define PORT 4444
+
+#define PITCH -45
 //---------------------------------------------------------------------------
 // Globals
 //---------------------------------------------------------------------------
@@ -121,24 +132,24 @@ struct myCoords {
 
     myCoords operator +(myCoords coords) const {
         myCoords ret;
-        ret.x = x+coords.x;
-        ret.y = y+coords.y;
-        ret.z = z+coords.z;
+        ret.x = x + coords.x;
+        ret.y = y + coords.y;
+        ret.z = z + coords.z;
         return ret;
     }
 
     myCoords operator -(myCoords coords) const {
         myCoords ret;
-        ret.x = x-coords.x;
-        ret.y = y-coords.y;
-        ret.z = z-coords.z;
+        ret.x = x - coords.x;
+        ret.y = y - coords.y;
+        ret.z = z - coords.z;
         return ret;
     }
-    bool operator ==(const myCoords& coords) const{
-        return (x==coords.x)&&(y==coords.y)&&(z==coords.z);
+    bool operator ==(const myCoords& coords) const {
+        return (x == coords.x) && (y == coords.y) && (z == coords.z);
     }
-    bool operator !=(const myCoords& coords) const{
-        return !(*this==coords);
+    bool operator !=(const myCoords& coords) const {
+        return !(*this == coords);
     }
 };
 
@@ -215,29 +226,38 @@ bool IsGood(const myCoords &coords,
 void CinematicaInversa(myCoords coords,
                        float* angoli) {
     float xx, yy, zz, di, c2, s2, c1, s1, a, b;
-    xx = coords.x;
-    yy = coords.y;
-    zz = coords.z;
+    float diWrist = L3 * cos(GRADE_TO_RAD(PITCH));
+    float xx_grip = coords.x;
+    float yy_grip = coords.y;
+    float zz_grip = coords.z;
+
+    float yaw = atan2(yy_grip, xx_grip);
+
+    xx = xx_grip - diWrist * cos(yaw);
+    yy = yy_grip - diWrist * sin(yaw);
+    zz = zz_grip - L3 * sin(GRADE_TO_RAD(PITCH));
+
+
+    angoli[0] = RAD_TO_GRADE(yaw);
 
     //out of the workspace
     if ((xx * xx + yy * yy + zz * zz) >= (L1 * L1 + L2 * L2)) {
-        angoli[0]=RAD_TO_GRADE(atan2(yy, xx));
         angoli[1] = RAD_TO_GRADE(atan2(zz, xx));
         angoli[2] = RAD_TO_GRADE(atan2(zz, xx));
     }
     else {
         di = sqrt(xx * xx + yy * yy);
         c2 = (di * di + zz * zz - L1 * L1 - L2 * L2) / (2 * L1 * L2);
-        s2 = GOMITO*sqrt(1 - c2 * c2);
+        s2 = GOMITO * sqrt(1 - c2 * c2);
         angoli[2] = RAD_TO_GRADE(atan2(s2, c2));
         a = c2 * L2 + L1;
         b = s2 * L2;
         c1 = (zz * b + di * a) / (a * a + b * b);
-        s1 = (c1 * a - di) / b;
+        s1 = (zz - c1 * b) / a;
         angoli[1] = RAD_TO_GRADE(atan2(s1, c1));
-        angoli[0] = RAD_TO_GRADE(atan2(yy, xx));
+        angoli[2] += angoli[1];
     }
-    angoli[3]=angoli[2];
+    angoli[3] = PITCH;
 }
 
 void CinematicaDiretta(float *angoli,
@@ -249,31 +269,31 @@ void CinematicaDiretta(float *angoli,
     a1 = GRADE_TO_RAD(angoli[1]);
     a2 = GRADE_TO_RAD(angoli[2]);
 
-    di = L1 * cos(a1) + L2 * cos(a1 + a2);
-    coords.z = L1 * sin(a1) + L2 * sin(a1 + a2);
+    di = L1 * cos(a1) + L2 * cos(a2)+L3*cos(GRADE_TO_RAD(PITCH));
+    coords.z = L1 * sin(a1) + L2 * sin(a2)+L3*sin(GRADE_TO_RAD(PITCH));
     coords.x = di * cos(a0);
     coords.y = di * sin(a0);
 }
 
-
-void ComputeDeadzone(const myCoords &gripperPos, myCoords &newGripperRef, float deadRadius){
-    myCoords dCoords=gripperPos-newGripperRef;
-    float dist=dCoords.x*dCoords.x+dCoords.y*dCoords.y+dCoords.z*dCoords.z;
+void ComputeDeadzone(const myCoords &gripperPos,
+                     myCoords &newGripperRef,
+                     float deadRadius) {
+    myCoords dCoords = gripperPos - newGripperRef;
+    float dist = dCoords.x * dCoords.x + dCoords.y * dCoords.y + dCoords.z * dCoords.z;
     //avoid vibrations that might be caused from computation errors
     //printf("d=%f", sqrt(dist));
-    if(sqrt(dist)<=deadRadius){
-        newGripperRef=gripperPos;
+    if (sqrt(dist) <= deadRadius) {
+        newGripperRef = gripperPos;
     }
 }
-
 
 int Connetti() {
     struct sockaddr_in client;
     int lunghezza = sizeof(client);
     int idsock = socket(AF_INET, SOCK_STREAM, 0);
     client.sin_family = AF_INET;
-    client.sin_port = htons(4444);
-    inet_aton("160.80.86.195", &(client.sin_addr));
+    client.sin_port = htons(PORT);
+    inet_aton(IP, &(client.sin_addr));
     if (connect(idsock, (struct sockaddr*) &client, sizeof(client)) == -1) {
         return -1;
     }
@@ -643,10 +663,10 @@ int main(int argc,
         //CONTROL
         if (calibrationDone) {
 #if 0
-            float angles[4]={0, 0, 0, 0};
-            for(int cnt=0; cnt<100; cnt++){
-                for (int l=0; l<3; l++){
-                  angles[l]=cnt*(360/100.);
+            float angles[4]= {0, 0, 0, 0};
+            for(int cnt=0; cnt<100; cnt++) {
+                for (int l=0; l<3; l++) {
+                    angles[l]=cnt*(360/100.);
                 }
                 myCoords proof;
                 printf("\n input %f %f %f %f", angles[0], angles[1], angles[2], angles[3]);
@@ -662,7 +682,8 @@ int main(int argc,
 #endif
             //read angles from remote
             myCoords gripperPos;
-            float angoli[4];
+            float angoli[NUMBER_OF_ANGLES];
+            memset(angoli, 0, sizeof(angoli));
             if (idSock > 0) {
                 if (read(idSock, angoli, sizeof(angoli)) > 0) {
 
@@ -671,14 +692,14 @@ int main(int argc,
                     cameraError.y = (ballCoords.y - armCoords.y);
                     cameraError.z = (ballCoords.z - armCoords.z);
 
-                    if(absVal(cameraError.x)<(X_CAM_DEADZONE+armCoords.radius+ballCoords.radius)){
-                        cameraError.x=0;
+                    if (absVal(cameraError.x) < (X_CAM_DEADZONE + armCoords.radius + ballCoords.radius)) {
+                        cameraError.x = 0;
                     }
-                    if(absVal(cameraError.y)<(Y_CAM_DEADZONE+armCoords.radius+ballCoords.radius)){
-                        cameraError.y=0;
+                    if (absVal(cameraError.y) < (Y_CAM_DEADZONE + armCoords.radius + ballCoords.radius)) {
+                        cameraError.y = 0;
                     }
-                    if(absVal(cameraError.z)<Z_CAM_DEADZONE){
-                        cameraError.z=0;
+                    if (absVal(cameraError.z) < Z_CAM_DEADZONE) {
+                        cameraError.z = 0;
                     }
                     PIDController pid(KP);
                     //compute the current scorbot gripper position
@@ -688,27 +709,27 @@ int main(int argc,
                     myCoords newGripperRef = gripperPos;
 
                     //add an error to the current position proportional to the camera error
-                    if(ballLostTime<=0.5 && armLostTime<=0.5){
-                     newGripperRef.x += pid.Execute(-cameraError.x, dt);
-                     newGripperRef.z += pid.Execute(-cameraError.y, dt);
-                     // don't use pid or use a different one here because the z is in millimeters from cam!
-                     newGripperRef.y += cameraError.z;//pid.Execute(cameraError.z, dt);
+                    if ((ballLostTime <= MAX_BALL_LOST_TIME) && (armLostTime <= MAX_ARM_LOST_TIME)) {
+                        newGripperRef.x += pid.Execute(cameraError.x, dt);
+                        newGripperRef.z += pid.Execute(-cameraError.y, dt);
+                        // don't use pid or use a different one here because the z is in millimeters from cam!
+                        newGripperRef.y += -cameraError.z;   //pid.Execute(cameraError.z, dt);
                     }
-/*
-                    newGripperRef.x = 200;
-                    newGripperRef.y = 200;
-                    newGripperRef.z = 400;
-*/
+                    /*
+                     newGripperRef.x = 200;
+                     newGripperRef.y = 200;
+                     newGripperRef.z = 400;
+                     */
 
-                     //avoid vibrations that might be caused from computation errors
+                    //avoid vibrations that might be caused from computation errors
                     ComputeDeadzone(gripperPos, newGripperRef, DEADZONE_RADIUS);
                     //compute the inverse kinematic
-                    if(newGripperRef!=gripperPos){
+                    if (newGripperRef != gripperPos) {
                         CinematicaInversa(newGripperRef, angoli);
                     }
                     /*for(int cnt=0; cnt<4; cnt++){
-                        printf("\nangolo[%d]=%f", cnt, angoli[cnt]);
-                    }*/
+                     printf("\nangolo[%d]=%f", cnt, angoli[cnt]);
+                     }*/
                     write(idSock, angoli, sizeof(angoli));
                 }
             }
