@@ -181,6 +181,7 @@ static void StateMachine(int minX,
                          int &maxX_used,
                          int minX_1,
                          int maxX_1,
+                         float curvature,
                          int linesCounter,
                          int imgMin,
                          int imgMax,
@@ -190,6 +191,7 @@ static void StateMachine(int minX,
     static int lineStatus = TWO_LINES;
     static int numberCyclesInStatus = 0;
 
+    // printf("\nstatus is %d", lineStatus);
     switch (lineStatus) {
 
     case (TWO_LINES): {
@@ -199,9 +201,25 @@ static void StateMachine(int minX,
             numberCyclesInStatus++;
         }
         else if (linesCounter == 1) {
-            int gapLeft = ABS_VAL(minX - minX_1);
-            int gapRight = ABS_VAL(maxX - maxX_1);
-            if (gapLeft < gapRight) {
+            bool turnRight = true;
+           // printf("\ncurvature = %f!!!\n", curvature);
+
+            if (ABS_VAL(curvature) > CURVATURE_THRES) {
+                turnRight = (curvature < 0.);
+             /*   if (turnRight) {
+                    printf("\nTURN RIGHT!!!\n");
+                }
+                else {
+                    printf("\nTURN LEFT!!!\n");
+                }*/
+            }
+            else {
+                //work on derivate
+                int gapLeft = ABS_VAL(minX - minX_1);
+                int gapRight = ABS_VAL(maxX - maxX_1);
+                turnRight = (gapLeft < gapRight);
+            }
+            if (turnRight) {
                 //printf("\nOnly Left Line!! %d %d %d %d %d %d\n", minX, maxX, minX_1, maxX_1, gapRight, gapLeft);
 
                 minX_used = minX;
@@ -213,17 +231,18 @@ static void StateMachine(int minX,
                 //printf("\nOnly Right Line!! %d %d %d %d %d %d\n", minX, maxX, minX_1, maxX_1, gapRight, gapLeft);
 
                 //assume the line as right line
-                minX_used = 0;
+                minX_used = imgMin;
                 maxX_used = maxX;
                 lineStatus = RIGHT_LINE;
             }
             numberCyclesInStatus = 0;
         }
         else if (linesCounter == 0) {
-            minX_used = initialMinX;
-            maxX_used = initialMaxX;
-            lineStatus = STOP;
-            numberCyclesInStatus = 0;
+            numberCyclesInStatus++;
+            if (numberCyclesInStatus >= ZERO_LINE_CYCLES) {
+                lineStatus = STOP;
+                numberCyclesInStatus = 0;
+            }
         }
     }
         break;
@@ -340,7 +359,6 @@ static void StateMachine(int minX,
 
     }
 
-    printf("\nstatus is %d", lineStatus);
 }
 
 int FollowLine(Mat &lineBandGreyThres,
@@ -378,25 +396,30 @@ int FollowLine(Mat &lineBandGreyThres,
     int maxX_used = initialMaxX;
     int minX_used = initialMinX;
 
+    float curvature = 0.;
     //search the minimum and maximum x points on all contours
 
     int linesCounter = 0;
 
-    for (int i = 0; i < contours.size() && (linesCounter<2); i++) {
+    for (int i = 0; i < contours.size() && (linesCounter < 2); i++) {
         if (InRange(contours[i].size(), MIN_CONTOURS_SIZE, MAX_CONTOURS_SIZE)) {
             int minX_temp = initialMinX;
             int maxX_temp = initialMaxX;
             int minY_temp = initialMinY;
             int maxY_temp = initialMaxY;
+            int yinMaxX = initialMaxY;
+            int yinMinX = initialMinY;
 
             for (int j = 0; j < contours[i].size(); j++) {
                 //take max and min on the middle line
 
                 if ((contours[i])[j].x < minX_temp) {
                     minX_temp = (contours[i])[j].x;
+                    yinMinX = (contours[i])[j].y;
                 }
                 if ((contours[i])[j].x > maxX_temp) {
                     maxX_temp = (contours[i])[j].x;
+                    yinMaxX = (contours[i])[j].y;
                 }
                 if ((contours[i])[j].y < minY_temp) {
                     minY_temp = (contours[i])[j].y;
@@ -417,17 +440,23 @@ int FollowLine(Mat &lineBandGreyThres,
                             width + MAX_WIDTH_LINE(lineBandGreyThres.rows, lineBandGreyThres.cols))) {
 
                     //printf("\nLINE DETECTED w=%d h=%d rows=%d!!!\n", maxX_temp - minX_temp, maxY_temp - minY_temp, lineBandGreyThres.rows);
-                    if (minX_temp < minX) {
-                        minX = minX_temp;
+                    int average = (maxX_temp + minX_temp) / 2;
+
+                    //
+                    curvature += ((maxX_temp - minX_temp) > width) ? (SIGN_VAL(yinMaxX - yinMinX) * ((maxX_temp - minX_temp) / ((float)width) - 1.)) : (0.);
+
+                    if (average < minX) {
+                        minX = average;
                     }
-                    if (maxX_temp > maxX) {
-                        maxX = maxX_temp;
+                    if (average > maxX) {
+                        maxX = average;
                     }
                     linesCounter++;
                 }
             }
         }
     }
+    curvature /= linesCounter;
 
     if (calibrate) {
         refLeft = minX;
@@ -447,7 +476,7 @@ int FollowLine(Mat &lineBandGreyThres,
     }
 #endif
 
-    StateMachine(minX, maxX, minX_used, maxX_used, minX_1, maxX_1, linesCounter, 0, lineBandGreyThres.cols, initialMinX, initialMaxX, speedControl);
+    StateMachine(minX, maxX, minX_used, maxX_used, minX_1, maxX_1, curvature, linesCounter, 0, lineBandGreyThres.cols, initialMinX, initialMaxX, speedControl);
 
     // something has been detected
     float control = DRIVE_ZERO_CONTROL;
@@ -479,10 +508,10 @@ int FollowLine(Mat &lineBandGreyThres,
         }
     }
 
-    if (linesCounter == 2) {
+   // if (linesCounter >= 2) {
         minX_1 = minX;
         maxX_1 = maxX;
-    }
+    //}
 
     // printf("\nline status=%d", lineStatus);
     //printf("Min=%d Max=%d\n", minX, maxX);

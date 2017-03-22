@@ -44,7 +44,7 @@ public:
     virtual ~Controller(){
 
     };
-    virtual float Execute(float error)=0;
+    virtual float Execute(float error, float dt)=0;
 };
 
 /*---------------------------------------------------------------------------*/

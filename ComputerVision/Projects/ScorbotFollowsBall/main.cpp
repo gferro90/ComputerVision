@@ -237,7 +237,6 @@ void CinematicaInversa(myCoords coords,
     yy = yy_grip - diWrist * sin(yaw);
     zz = zz_grip - L3 * sin(GRADE_TO_RAD(PITCH));
 
-
     angoli[0] = RAD_TO_GRADE(yaw);
 
     //out of the workspace
@@ -269,8 +268,8 @@ void CinematicaDiretta(float *angoli,
     a1 = GRADE_TO_RAD(angoli[1]);
     a2 = GRADE_TO_RAD(angoli[2]);
 
-    di = L1 * cos(a1) + L2 * cos(a2)+L3*cos(GRADE_TO_RAD(PITCH));
-    coords.z = L1 * sin(a1) + L2 * sin(a2)+L3*sin(GRADE_TO_RAD(PITCH));
+    di = L1 * cos(a1) + L2 * cos(a2) + L3 * cos(GRADE_TO_RAD(PITCH));
+    coords.z = L1 * sin(a1) + L2 * sin(a2) + L3 * sin(GRADE_TO_RAD(PITCH));
     coords.x = di * cos(a0);
     coords.y = di * sin(a0);
 }
@@ -337,15 +336,41 @@ int main(int argc,
         return 1;
     }
 
-    // Opencv initialization
+    // get the image data
+    Mat frame;
+    Mat depth;
 
-    namedWindow("Display Depth", CV_WINDOW_AUTOSIZE);
+    rc = g_context.WaitAnyUpdateAll();
+
+    g_image.GetMapOutputMode(imageMapMode);
+    g_depth.GetMapOutputMode(depthMapMode);
+
+    const XnDepthPixel* pDepthMap = g_depth.GetDepthMap();
+    const XnRGB24Pixel* pImageMap = g_image.GetRGB24ImageMap();
+
+    convert_pixel_map_d(pDepthMap, depth, depthMapMode.nYRes, depthMapMode.nXRes);
+    convert_pixel_map_i(pImageMap, frame, imageMapMode.nYRes, imageMapMode.nXRes);
+
 
     int height, width, step, channels;  //parameters of the image we are working on
     int t1min_arm = 0, t1max_arm = 0, t2min_arm = 0, t2max_arm = 0, t3min_arm = 0, t3max_arm = 0; // other variables used
     int t1min_ball = 0, t1max_ball = 0, t2min_ball = 0, t2max_ball = 0, t3min_ball = 0, t3max_ball = 0; // other variables used
+    int max_ball_radius, min_ball_radius, max_arm_radius, min_arm_radius;
+    int ball_precision, arm_precision;
+    int arm_min_dist, ball_min_dist;
 
-    CvMat* threshold_matrix = cvCreateMat(4, 3, CV_32FC1);
+    height = frame.rows;
+    width = frame.cols;
+
+    // capture size -
+    Size size = Size(width, height);
+
+    // Opencv initialization
+
+    namedWindow("Display Depth", CV_WINDOW_AUTOSIZE);
+
+
+    CvMat* threshold_matrix = cvCreateMat(7, 3, CV_32FC1);
 
     // Load the previous values of the threshold if they exist
     if (cvOpenFileStorage(STORAGE_FILE, NULL, CV_STORAGE_READ)) {
@@ -363,6 +388,18 @@ int main(int argc,
         t1max_ball =(int) CV_MAT_ELEM(*threshold_matrix,float,3,0);
         t2max_ball =(int) CV_MAT_ELEM(*threshold_matrix,float,3,1);
         t3max_ball =(int) CV_MAT_ELEM(*threshold_matrix,float,3,2);
+
+        max_arm_radius =(int) CV_MAT_ELEM(*threshold_matrix,float,4,0);
+        min_arm_radius =(int) CV_MAT_ELEM(*threshold_matrix,float,4,1);
+        arm_min_dist =(int) CV_MAT_ELEM(*threshold_matrix,float,4,2);
+
+        max_ball_radius =(int) CV_MAT_ELEM(*threshold_matrix,float,5,0);
+        min_ball_radius =(int) CV_MAT_ELEM(*threshold_matrix,float,5,1);
+        ball_min_dist =(int) CV_MAT_ELEM(*threshold_matrix,float,5,2);
+
+        arm_precision =(int) CV_MAT_ELEM(*threshold_matrix,float,6,0);
+        ball_precision =(int) CV_MAT_ELEM(*threshold_matrix,float,6,1);
+
 //#endif
     }
 
@@ -393,6 +430,19 @@ int main(int argc,
     char TrackbarName11[50] = "t3min_ball";
     char TrackbarName12[50] = "t3max_ball";
 
+    char TrackbarName13[50] = "min_arm_radius";
+    char TrackbarName14[50] = "max_arm_radius";
+
+    char TrackbarName15[50] = "min_ball_radius";
+    char TrackbarName16[50] = "max_ball_radius";
+
+
+    char TrackbarName17[50] = "arm_precision";
+    char TrackbarName18[50] = "ball_precision";
+
+    char TrackbarName19[50] = "arm_min_dist";
+    char TrackbarName20[50] = "ball_min_dist";
+
     cvCreateTrackbar(TrackbarName1, "F1_ARM", &t1min_arm, 260, NULL);
     cvCreateTrackbar(TrackbarName2, "F1_ARM", &t1max_arm, 260, NULL);
 
@@ -411,32 +461,23 @@ int main(int argc,
     cvCreateTrackbar(TrackbarName11, "F3_BALL", &t3min_ball, 260, NULL);
     cvCreateTrackbar(TrackbarName12, "F3_BALL", &t3max_ball, 260, NULL);
 
+    cvCreateTrackbar(TrackbarName13, "Camera", &min_arm_radius, MAX_RADIUS, NULL);
+    cvCreateTrackbar(TrackbarName14, "Camera", &max_arm_radius, MAX_RADIUS, NULL);
+
+    cvCreateTrackbar(TrackbarName15, "Camera", &min_ball_radius, MAX_RADIUS, NULL);
+    cvCreateTrackbar(TrackbarName16, "Camera", &max_ball_radius, MAX_RADIUS, NULL);
+
+    cvCreateTrackbar(TrackbarName17, "Camera", &arm_precision, 150, NULL);
+    cvCreateTrackbar(TrackbarName18, "Camera", &ball_precision, 150, NULL);
+
+    cvCreateTrackbar(TrackbarName19, "Camera", &arm_min_dist, width, NULL);
+    cvCreateTrackbar(TrackbarName20, "Camera", &ball_min_dist, width, NULL);
+
 // Load threshold from the slider bars in these 2 parameters
     Scalar hsv_min_arm = cvScalar(t1min_arm, t2min_arm, t3min_arm);
     Scalar hsv_max_arm = cvScalar(t1max_arm, t2max_arm, t3max_arm);
     Scalar hsv_min_ball = cvScalar(t1min_ball, t2min_ball, t3min_ball);
     Scalar hsv_max_ball = cvScalar(t1max_ball, t2max_ball, t3max_ball);
-
-// get the image data
-    Mat frame;
-    Mat depth;
-
-    rc = g_context.WaitAnyUpdateAll();
-
-    g_image.GetMapOutputMode(imageMapMode);
-    g_depth.GetMapOutputMode(depthMapMode);
-
-    const XnDepthPixel* pDepthMap = g_depth.GetDepthMap();
-    const XnRGB24Pixel* pImageMap = g_image.GetRGB24ImageMap();
-
-    convert_pixel_map_d(pDepthMap, depth, depthMapMode.nYRes, depthMapMode.nXRes);
-    convert_pixel_map_i(pImageMap, frame, imageMapMode.nYRes, imageMapMode.nXRes);
-
-    height = frame.rows;
-    width = frame.cols;
-
-// capture size -
-    Size size = Size(width, height);
 
 // Initialize different images that are going to be used in the program
     Mat hsv_frame(size, CV_8UC3); // image converted to HSV plane
@@ -523,7 +564,7 @@ int main(int argc,
 
         //hough transform to detect circle
         vector < Vec3f > circles_arm;
-        HoughCircles(thresholded_arm, circles_arm, CV_HOUGH_GRADIENT, 2, thresholded_arm.rows / 4, 100, 50, MIN_RADIUS, MAX_RADIUS);
+        HoughCircles(thresholded_arm, circles_arm, CV_HOUGH_GRADIENT, 2, arm_min_dist, 100, arm_precision, min_arm_radius, max_arm_radius);
 
         float dt = 0;
         bool done = false;
@@ -613,7 +654,7 @@ int main(int argc,
 //hough transform to detect circle
         vector < Vec3f > circles_ball;
         //#endif
-        HoughCircles(thresholded_ball, circles_ball, CV_HOUGH_GRADIENT, 2, thresholded_ball.rows / 4, 100, 50, MIN_RADIUS, MAX_RADIUS);
+        HoughCircles(thresholded_ball, circles_ball, CV_HOUGH_GRADIENT, 2, ball_min_dist, 100, ball_precision, min_ball_radius, max_ball_radius);
 
         done = false;
 //find ball
@@ -782,6 +823,18 @@ int main(int argc,
     *((float*) CV_MAT_ELEM_PTR(*threshold_matrix, 3, 0)) = t1max_ball;
     *((float*) CV_MAT_ELEM_PTR(*threshold_matrix, 3, 1)) = t2max_ball;
     *((float*) CV_MAT_ELEM_PTR(*threshold_matrix, 3, 2)) = t3max_ball;
+
+    *((float*) CV_MAT_ELEM_PTR(*threshold_matrix, 4, 0)) = min_arm_radius;
+    *((float*) CV_MAT_ELEM_PTR(*threshold_matrix, 4, 1)) = max_arm_radius;
+    *((float*) CV_MAT_ELEM_PTR(*threshold_matrix, 4, 2)) = arm_min_dist;
+
+
+    *((float*) CV_MAT_ELEM_PTR(*threshold_matrix, 5, 0)) = min_ball_radius;
+    *((float*) CV_MAT_ELEM_PTR(*threshold_matrix, 5, 1)) = max_ball_radius;
+    *((float*) CV_MAT_ELEM_PTR(*threshold_matrix, 5, 2)) = ball_min_dist;
+
+    *((float*) CV_MAT_ELEM_PTR(*threshold_matrix, 6, 0)) = arm_precision;
+    *((float*) CV_MAT_ELEM_PTR(*threshold_matrix, 6, 1)) = ball_precision;
 
     cvSave(STORAGE_FILE, threshold_matrix);
 

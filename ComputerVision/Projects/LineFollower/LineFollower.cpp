@@ -189,8 +189,10 @@ int main(int argc,
 
     if (usbFD > 0) {
         speedControl = PWM_SPEED_REMAP(SPEED_ZERO_CONTROL);
-        controls = (speedControl << 8);
         driveControl = PWM_DRIVE_REMAP(DRIVE_ZERO_CONTROL);
+        speedControl-=SPEED_PWM_MIN;
+        driveControl-=DRIVE_PWM_MIN;
+        controls = (speedControl << 8);
         controls |= driveControl;
         if (write(usbFD, &controls, sizeof(controls)) < 0) {
             printf("\nUSB write ERROR!\n");
@@ -198,9 +200,13 @@ int main(int argc,
     }
     sleep(10);
 
+    printf("\nSTART!!\n");
+
+    struct timeval stop, start;
+
 //program loop
     while (1) {
-
+       // gettimeofday(&start, NULL);
         //WIP
 
         speedControl = PWM_SPEED_REMAP(SPEED_STANDARD_CONTROL);
@@ -247,10 +253,12 @@ int main(int argc,
         driveControl = FollowLine(lineBandGreyThres, lineBandGreyThres.cols + 1, 0, lineBandGreyThres.rows, 0, status, refLeft, refRight, lineWidth, lineHeight,
                                   speedControl, false);
 
+        speedControl-=SPEED_PWM_MIN;
+        driveControl-=DRIVE_PWM_MIN;
         controls = (speedControl << 8);
-        controls |= driveControl;
+        controls |= (driveControl);
 
-        printf("controls %d %d\n", speedControl, driveControl);
+        //printf("controls %d %d\n", speedControl, driveControl);
         if (write(usbFD, &controls, sizeof(controls)) < 0) {
             printf("\nUSB write ERROR!\n");
         }
@@ -285,9 +293,15 @@ int main(int argc,
 
                 if ((cvWaitKey(5) & 255) == 27) {
                     speedControl = PWM_SPEED_REMAP(SPEED_ZERO_CONTROL);
-                    controls = (speedControl << 8);
                     driveControl = PWM_DRIVE_REMAP(DRIVE_ZERO_CONTROL);
+
+                    speedControl-=SPEED_PWM_MIN;
+                    driveControl-=DRIVE_PWM_MIN;
+
+                    controls = (speedControl << 8);
                     controls |= driveControl;
+
+
                     if (write(usbFD, &controls, sizeof(controls)) < 0) {
                         printf("\nUSB write ERROR!\n");
                     }
@@ -296,6 +310,10 @@ int main(int argc,
             }
         }
 #endif
+
+    /*    gettimeofday(&stop, NULL);
+        printf("cycle time usec=%d", (stop.tv_sec- start.tv_sec)*1000000+(stop.tv_usec- start.tv_usec));
+        */
     }
 #ifdef SHOW_IMAGES
 

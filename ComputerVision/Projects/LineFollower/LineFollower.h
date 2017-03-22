@@ -41,6 +41,8 @@
 #include <unistd.h>
 #include <termios.h>
 #include <string.h>
+#include<time.h>
+#include <sys/time.h>
 /*---------------------------------------------------------------------------*/
 /*                        Project header includes                            */
 /*---------------------------------------------------------------------------*/
@@ -61,10 +63,10 @@
 #define CALIBRATE
 
 //black line threshold
-#define LINE_THRES 200
+#define LINE_THRES 15
 
 //black line threshold
-#define LINE_THRES_TYPE 0
+#define LINE_THRES_TYPE 1
 
 //definitions of HSV color ranges for signal recognition
 #define BLUE1 Scalar(0, 0, 0) //TODO
@@ -90,7 +92,7 @@
 //definition of left and right lines ranges
 #define WIDTH_LINE(rows, cols) 37//TODO
 #define MAX_WIDTH_LINE(rows, cols) cols//TODO
-#define MIN_WIDTH_LINE(rows, cols) -4//TODO
+#define MIN_WIDTH_LINE(rows, cols) -8//TODO
 
 #define HEIGHT_LINE(rows, cols) 37//TODO
 #define MAX_HEIGHT_LINE(rows, cols) 0//TODO
@@ -109,20 +111,20 @@
 // define the drive control remapping parameters
 #define DRIVE_CONTROL_MIN -5000.0
 #define DRIVE_CONTROL_MAX 5000.0
-#define DRIVE_PWM_MIN 70
-#define DRIVE_PWM_MAX 170
+#define DRIVE_PWM_MIN 140
+#define DRIVE_PWM_MAX 340
 
 // define the speed control remapping parameters
 #define SPEED_CONTROL_MIN -7200.0
 #define SPEED_CONTROL_MAX 7200.0
-#define SPEED_PWM_MIN 100
-#define SPEED_PWM_MAX 200
+#define SPEED_PWM_MIN 200
+#define SPEED_PWM_MAX 400
 
 //define the standard controls
 #define SPEED_ZERO_CONTROL 0//(SPEED_CONTROL_MAX+SPEED_CONTROL_MIN)/2
 #define DRIVE_ZERO_CONTROL 0//(DRIVE_CONTROL_MAX+DRIVE_CONTROL_MIN)/2
 //zero pwm +1
-#define SPEED_STANDARD_CONTROL SPEED_ZERO_CONTROL+5*(SPEED_CONTROL_MAX-SPEED_CONTROL_MIN)/(SPEED_PWM_MAX-SPEED_PWM_MIN)
+#define SPEED_STANDARD_CONTROL SPEED_ZERO_CONTROL+12*(SPEED_CONTROL_MAX-SPEED_CONTROL_MIN)/(SPEED_PWM_MAX-SPEED_PWM_MIN)
 
 //the minimum width for the signal band
 #define SIGNAL_MIN_WIDTH 20
@@ -140,12 +142,19 @@
 #define PWM_SPEED_REMAP(control) PwmRemapping(control, SPEED_CONTROL_MIN, SPEED_CONTROL_MAX, SPEED_PWM_MIN, SPEED_PWM_MAX)
 #define PWM_DRIVE_REMAP(control) PwmRemapping(control, DRIVE_CONTROL_MIN, DRIVE_CONTROL_MAX, DRIVE_PWM_MIN, DRIVE_PWM_MAX)
 
+#define CURVATURE_THRES 0.3
 
 enum stati{FOLLOW_RIGHT=0, FOLLOW_LEFT};
 
 #define ASSIGN_SIGNAL_NAME(name, color, function) {name, color##1, color##2, function}
 
-#define ABS_VAL(a) ((a)>0)?(a):(-(a))
+inline float ABS_VAL(float a){
+    return ((a)>0)?(a):(-(a));
+}
+
+inline int SIGN_VAL(float a) {
+    return (a>0)?(1):(-1);
+}
 
 struct ColorRange {
     const char * signalName;
